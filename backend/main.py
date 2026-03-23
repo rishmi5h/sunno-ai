@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import json
 import logging
@@ -10,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from database import init_db, cleanup_expired, ensure_session, save_message, get_conversation_history
 from emotion_detector import detect_emotion
-from voice_pipeline import process_voice
+from voice_pipeline import process_voice_streaming
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,6 +38,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     audio_buffer = bytearray()
 
+    async def send_message(msg: dict):
+        await websocket.send_json(msg)
+
     try:
         while True:
             raw = await websocket.receive_text()
@@ -58,11 +60,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 await websocket.send_json({"type": "thinking"})
 
-                # Get conversation history from DB
                 conversation_history = await get_conversation_history(session_id)
 
-                transcript, response_text, audio = await process_voice(
-                    audio_bytes, conversation_history,
+                # Streaming pipeline — sends transcript, response_text,
+                # and audio_chunks directly via send_message callback
+                transcript, response_text = await process_voice_streaming(
+                    audio_bytes, conversation_history, send_message,
                 )
 
                 if not transcript:
@@ -73,31 +76,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     await websocket.send_json({"type": "done"})
                     continue
 
-                # Send transcript
-                await websocket.send_json({
-                    "type": "transcript",
-                    "text": transcript,
-                })
-
                 # Persist to DB
                 emotion = detect_emotion(transcript)
                 await save_message(session_id, "user", transcript, emotion)
                 await save_message(session_id, "assistant", response_text)
-
-                # Send response text (for accessibility)
-                await websocket.send_json({
-                    "type": "response_text",
-                    "text": response_text,
-                })
-
-                # Send audio in chunks (64KB each)
-                chunk_size = 65536
-                for i in range(0, len(audio), chunk_size):
-                    chunk = audio[i : i + chunk_size]
-                    await websocket.send_json({
-                        "type": "audio_chunk",
-                        "data": base64.b64encode(chunk).decode(),
-                    })
 
                 await websocket.send_json({"type": "done"})
 
