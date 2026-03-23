@@ -15,7 +15,7 @@ from config import (
 )
 from emotion_detector import detect_emotion
 from listener_prompt import LISTENER_SYSTEM_PROMPT
-from safety import SAFETY_RESPONSE, check_safety
+from safety import check_safety
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +64,9 @@ async def generate_response(
     transcript: str, conversation_history: list[dict],
 ) -> str:
     """Generate a listener response using Claude."""
-    if check_safety(transcript):
-        return SAFETY_RESPONSE
+    safety_response = check_safety(transcript)
+    if safety_response:
+        return safety_response
 
     emotion = detect_emotion(transcript)
     emotion_context = f"[The person seems to be feeling {emotion}.]" if emotion != "neutral" else ""

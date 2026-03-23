@@ -9,9 +9,11 @@
     --bg-warm: #0f0d12;
     --amber: #f4a261;
     --amber-dim: #f4a26133;
+    --amber-glow: #f4a26122;
     --lavender: #b8a9c9;
     --text: #e8e4e0;
     --text-dim: #8a8580;
+    --text-faint: #5a5550;
     --danger: #e76f51;
 }
 
@@ -22,6 +24,8 @@ html, body {
     color: var(--text);
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 /* Screens */
@@ -35,6 +39,7 @@ html, body {
 }
 .screen.active {
     display: flex;
+    animation: fadeIn 0.5s ease-out;
 }
 
 /* ── Landing ── */
@@ -44,6 +49,7 @@ html, body {
     justify-content: center;
     text-align: center;
     padding: 2rem;
+    background: radial-gradient(ellipse at 50% 40%, #1a1520 0%, var(--bg-warm) 70%);
 }
 
 .landing-content {
@@ -60,6 +66,7 @@ html, body {
     font-size: 5rem;
     color: var(--amber);
     letter-spacing: 0.02em;
+    text-shadow: 0 0 60px var(--amber-dim);
 }
 
 .tagline {
@@ -80,11 +87,11 @@ html, body {
     border: none;
     border-radius: 100px;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s, box-shadow 0.3s;
 }
 .start-button:hover {
     transform: scale(1.04);
-    box-shadow: 0 0 30px var(--amber-dim);
+    box-shadow: 0 0 40px var(--amber-dim);
 }
 .start-button:active {
     transform: scale(0.97);
@@ -96,7 +103,7 @@ html, body {
 }
 .landing-footer p {
     font-size: 0.75rem;
-    color: var(--text-dim);
+    color: var(--text-faint);
 }
 .landing-footer a {
     color: var(--lavender);
@@ -108,6 +115,7 @@ html, body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    background: radial-gradient(ellipse at 50% 35%, #161218 0%, var(--bg-warm) 60%);
 }
 
 .session-container {
@@ -115,7 +123,7 @@ html, body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2rem;
+    gap: 2.5rem;
     width: 100%;
     padding: 2rem;
 }
@@ -125,17 +133,26 @@ html, body {
     position: relative;
     width: 300px;
     height: 300px;
+    touch-action: none;
+    transition: transform 0.15s;
+}
+#orb-container:active {
+    transform: scale(0.97);
+}
+#orb-container[data-state="recording"] {
+    cursor: default;
 }
 
 #orb {
     width: 100%;
     height: 100%;
+    display: block;
 }
 
 .status-text {
     font-size: 0.95rem;
     color: var(--text-dim);
-    transition: opacity 0.3s;
+    transition: opacity 0.4s, color 0.4s;
     min-height: 1.5em;
     text-align: center;
 }
@@ -145,18 +162,48 @@ html, body {
     text-align: center;
     font-size: 0.85rem;
     color: var(--text-dim);
-    opacity: 0.6;
-    min-height: 2em;
-    line-height: 1.5;
+    opacity: 0.3;
+    min-height: 2.5em;
+    line-height: 1.6;
     padding: 0 1rem;
+    transition: opacity 0.6s;
+}
+.transcript-area.user {
+    font-style: italic;
+    color: var(--text-faint);
+}
+.transcript-area.ai {
+    color: var(--amber);
+    opacity: 0.5;
 }
 
 /* ── Animations ── */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
+    from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.screen.active {
-    animation: fadeIn 0.4s ease-out;
+/* ── Mobile adjustments ── */
+@media (max-width: 480px) {
+    .logo {
+        font-size: 4rem;
+    }
+    #orb-container {
+        width: 250px;
+        height: 250px;
+    }
+    .tagline {
+        font-size: 1rem;
+        max-width: 280px;
+    }
+}
+
+@media (max-height: 600px) {
+    .session-container {
+        gap: 1.5rem;
+    }
+    #orb-container {
+        width: 200px;
+        height: 200px;
+    }
 }

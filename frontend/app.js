@@ -5,6 +5,8 @@ let audioChunks = [];
 let isRecording = false;
 let sessionId = crypto.randomUUID();
 let state = "idle"; // idle | recording | thinking | speaking
+let analyser = null;
+let audioDataArray = null;
 
 // ── DOM ──
 const landing = document.getElementById("landing");
@@ -15,6 +17,15 @@ const statusEl = document.getElementById("status");
 const transcriptArea = document.getElementById("transcript-area");
 const ctx = orbCanvas.getContext("2d");
 
+// HiDPI canvas
+function setupCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = orbCanvas.getBoundingClientRect();
+    orbCanvas.width = rect.width * dpr;
+    orbCanvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+}
+
 // ── Landing → Session ──
 startBtn.addEventListener("click", async () => {
     landing.classList.remove("active");
@@ -23,8 +34,9 @@ startBtn.addEventListener("click", async () => {
 });
 
 async function initSession() {
+    setupCanvas();
     connectWebSocket();
-    requestMicPermission();
+    await requestMicPermission();
     drawOrb();
 }
 
@@ -56,7 +68,7 @@ let isPlaying = false;
 function handleServerMessage(msg) {
     switch (msg.type) {
         case "transcript":
-            transcriptArea.textContent = msg.text;
+            showTranscript(msg.text, "user");
             break;
 
         case "thinking":
@@ -64,7 +76,7 @@ function handleServerMessage(msg) {
             break;
 
         case "response_text":
-            // Could display this, keeping it subtle
+            showTranscript(msg.text, "ai");
             break;
 
         case "audio_chunk":
@@ -73,15 +85,25 @@ function handleServerMessage(msg) {
             break;
 
         case "done":
-            // Audio might still be playing, state will reset after playback
             if (!isPlaying) setState("idle");
             break;
 
         case "error":
             statusEl.textContent = msg.message;
-            setState("idle");
+            setTimeout(() => setState("idle"), 2000);
             break;
     }
+}
+
+function showTranscript(text, who) {
+    transcriptArea.textContent = text;
+    transcriptArea.className = `transcript-area ${who}`;
+    // Fade out after a delay
+    clearTimeout(transcriptArea._fadeTimer);
+    transcriptArea.style.opacity = "0.7";
+    transcriptArea._fadeTimer = setTimeout(() => {
+        transcriptArea.style.opacity = "0.3";
+    }, 4000);
 }
 
 async function playAudioQueue() {
@@ -94,7 +116,6 @@ async function playAudioQueue() {
     isPlaying = true;
     setState("speaking");
 
-    // Combine all chunks into one blob
     const combined = new Blob(audioQueue, { type: "audio/mpeg" });
     audioQueue = [];
 
@@ -103,7 +124,6 @@ async function playAudioQueue() {
 
     audio.onended = () => {
         URL.revokeObjectURL(url);
-        // Check if more chunks arrived while playing
         if (audioQueue.length > 0) {
             playAudioQueue();
         } else {
@@ -138,10 +158,31 @@ async function requestMicPermission() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         setupRecorder(stream);
+        setupAnalyser(stream);
+        setState("idle");
     } catch (err) {
         statusEl.textContent = "Mic access needed to talk";
         console.error("Mic error:", err);
     }
+}
+
+function setupAnalyser(stream) {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    audioDataArray = new Uint8Array(analyser.frequencyBinCount);
+}
+
+function getAudioLevel() {
+    if (!analyser || !audioDataArray) return 0;
+    analyser.getByteFrequencyData(audioDataArray);
+    let sum = 0;
+    for (let i = 0; i < audioDataArray.length; i++) {
+        sum += audioDataArray[i];
+    }
+    return sum / audioDataArray.length / 255; // 0-1
 }
 
 function setupRecorder(stream) {
@@ -161,7 +202,6 @@ function setupRecorder(stream) {
         const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
         audioChunks = [];
 
-        // Convert to base64 and send
         const buffer = await blob.arrayBuffer();
         const base64 = arrayBufferToBase64(buffer);
 
@@ -181,22 +221,48 @@ function arrayBufferToBase64(buffer) {
     return btoa(binary);
 }
 
-// ── Tap to Record (toggle) ──
+// ── Tap to Record (toggle) + Hold to talk ──
 const orbContainer = document.getElementById("orb-container");
+let holdTimer = null;
+let isHolding = false;
 
-orbContainer.addEventListener("click", () => {
+orbContainer.addEventListener("pointerdown", (e) => {
     if (state === "thinking" || state === "speaking") return;
+    e.preventDefault();
 
-    if (isRecording) {
-        stopRecording();
+    // Start hold-to-talk timer
+    isHolding = false;
+    holdTimer = setTimeout(() => {
+        isHolding = true;
+        if (!isRecording) startRecording();
+    }, 300);
+});
+
+orbContainer.addEventListener("pointerup", (e) => {
+    e.preventDefault();
+    clearTimeout(holdTimer);
+
+    if (isHolding) {
+        // Was hold-to-talk, stop on release
+        if (isRecording) stopRecording();
+        isHolding = false;
     } else {
-        startRecording();
+        // Was a tap — toggle
+        if (state === "thinking" || state === "speaking") return;
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
     }
 });
 
-// Also support hold-to-talk
-orbContainer.addEventListener("mousedown", (e) => {
-    // Only for long press, handled by click for toggle
+orbContainer.addEventListener("pointerleave", () => {
+    clearTimeout(holdTimer);
+    if (isHolding && isRecording) {
+        stopRecording();
+        isHolding = false;
+    }
 });
 
 function startRecording() {
@@ -205,8 +271,6 @@ function startRecording() {
     mediaRecorder.start();
     isRecording = true;
     setState("recording");
-
-    // Haptic feedback on mobile
     if (navigator.vibrate) navigator.vibrate(30);
 }
 
@@ -215,13 +279,13 @@ function stopRecording() {
     mediaRecorder.stop();
     isRecording = false;
     setState("thinking");
-
     if (navigator.vibrate) navigator.vibrate(20);
 }
 
 // ── State Management ──
 function setState(newState) {
     state = newState;
+    orbContainer.setAttribute("data-state", state);
     switch (state) {
         case "idle":
             statusEl.textContent = "Tap to talk";
@@ -240,12 +304,29 @@ function setState(newState) {
 }
 
 // ── Orb Animation ──
-let animFrame;
 let orbTime = 0;
+let smoothRadius = 80;
+let smoothGlow = 0.12;
+let targetRadius = 80;
+let targetGlow = 0.12;
+
+// Particle system for ambient floaters
+const particles = [];
+for (let i = 0; i < 20; i++) {
+    particles.push({
+        angle: Math.random() * Math.PI * 2,
+        dist: 100 + Math.random() * 50,
+        speed: 0.2 + Math.random() * 0.3,
+        size: 1 + Math.random() * 2,
+        alpha: 0.1 + Math.random() * 0.2,
+        phase: Math.random() * Math.PI * 2,
+    });
+}
 
 function drawOrb() {
-    const w = orbCanvas.width;
-    const h = orbCanvas.height;
+    const rect = orbCanvas.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
     const cx = w / 2;
     const cy = h / 2;
     const baseRadius = 80;
@@ -253,74 +334,144 @@ function drawOrb() {
     orbTime += 0.016;
     ctx.clearRect(0, 0, w, h);
 
-    // Glow
-    const glowAlpha = state === "recording" ? 0.3 : state === "speaking" ? 0.25 : 0.12;
-    const glowRadius = state === "recording" ? 140 : state === "speaking" ? 130 : 110;
-    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius);
-    gradient.addColorStop(0, `rgba(244, 162, 97, ${glowAlpha})`);
-    gradient.addColorStop(0.6, `rgba(244, 162, 97, ${glowAlpha * 0.3})`);
+    // Audio-reactive amplitude
+    const audioLevel = state === "recording" ? getAudioLevel() : 0;
+
+    // Target values by state
+    if (state === "idle") {
+        targetRadius = baseRadius + Math.sin(orbTime * 1.2) * 4;
+        targetGlow = 0.1 + Math.sin(orbTime * 0.8) * 0.03;
+    } else if (state === "recording") {
+        targetRadius = baseRadius + 12 + audioLevel * 25 + Math.sin(orbTime * 2.5) * 5;
+        targetGlow = 0.25 + audioLevel * 0.25;
+    } else if (state === "thinking") {
+        targetRadius = baseRadius + Math.sin(orbTime * 3) * 3;
+        targetGlow = 0.15 + Math.sin(orbTime * 2) * 0.05;
+    } else if (state === "speaking") {
+        targetRadius = baseRadius + 4 + Math.sin(orbTime * 4) * 7 + Math.sin(orbTime * 6.5) * 3;
+        targetGlow = 0.2 + Math.sin(orbTime * 4) * 0.08;
+    }
+
+    // Smooth interpolation
+    smoothRadius += (targetRadius - smoothRadius) * 0.12;
+    smoothGlow += (targetGlow - smoothGlow) * 0.1;
+    const radius = smoothRadius;
+
+    // Outer glow
+    const glowRadius = radius + 60;
+    const gradient = ctx.createRadialGradient(cx, cy, radius * 0.5, cx, cy, glowRadius);
+    gradient.addColorStop(0, `rgba(244, 162, 97, ${smoothGlow})`);
+    gradient.addColorStop(0.5, `rgba(244, 140, 80, ${smoothGlow * 0.3})`);
     gradient.addColorStop(1, "rgba(244, 162, 97, 0)");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);
 
-    // Orb body
-    let radius = baseRadius;
-    if (state === "idle") {
-        // Gentle breathing
-        radius += Math.sin(orbTime * 1.5) * 4;
-    } else if (state === "recording") {
-        // Expand with ripple
-        radius += Math.sin(orbTime * 3) * 8 + 10;
-    } else if (state === "thinking") {
-        // Subtle shimmer
-        radius += Math.sin(orbTime * 4) * 3;
-    } else if (state === "speaking") {
-        // Rhythmic pulse
-        radius += Math.sin(orbTime * 5) * 6;
+    // Ambient particles
+    for (const p of particles) {
+        p.angle += p.speed * 0.016;
+        const wobble = Math.sin(orbTime * 0.7 + p.phase) * 10;
+        const d = p.dist + wobble + (state === "recording" ? audioLevel * 30 : 0);
+        const px = cx + Math.cos(p.angle) * d;
+        const py = cy + Math.sin(p.angle) * d;
+        const pa = p.alpha * (state === "idle" ? 0.5 : 1);
+        ctx.beginPath();
+        ctx.arc(px, py, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(244, 180, 120, ${pa})`;
+        ctx.fill();
     }
 
-    // Main circle
-    const orbGradient = ctx.createRadialGradient(cx - 15, cy - 15, 0, cx, cy, radius);
-    orbGradient.addColorStop(0, "#f4a261");
-    orbGradient.addColorStop(0.5, "#e07a3a");
-    orbGradient.addColorStop(1, "#c45e20");
+    // Recording ripples (multiple expanding rings)
+    if (state === "recording") {
+        for (let i = 0; i < 3; i++) {
+            const t = (orbTime * 0.8 + i * 1.2) % 3.6;
+            const rippleR = radius + t * 25;
+            const rippleA = Math.max(0, 0.25 - t * 0.07);
+            ctx.beginPath();
+            ctx.arc(cx, cy, rippleR, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(244, 162, 97, ${rippleA})`;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
+    }
+
+    // Orb body — layered gradient for depth
+    const orbGrad = ctx.createRadialGradient(cx - radius * 0.15, cy - radius * 0.2, 0, cx, cy, radius);
+    orbGrad.addColorStop(0, "#ffc58a");
+    orbGrad.addColorStop(0.3, "#f4a261");
+    orbGrad.addColorStop(0.7, "#e07a3a");
+    orbGrad.addColorStop(1, "#c45e20");
 
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = orbGradient;
+    ctx.fillStyle = orbGrad;
     ctx.fill();
 
-    // Inner highlight
-    const highlight = ctx.createRadialGradient(cx - 20, cy - 25, 0, cx, cy, radius * 0.6);
-    highlight.addColorStop(0, "rgba(255, 220, 180, 0.35)");
+    // Soft inner light (shifts with time for organic feel)
+    const lightX = cx - radius * 0.2 + Math.sin(orbTime * 0.5) * 8;
+    const lightY = cy - radius * 0.25 + Math.cos(orbTime * 0.7) * 5;
+    const highlight = ctx.createRadialGradient(lightX, lightY, 0, cx, cy, radius * 0.7);
+    highlight.addColorStop(0, "rgba(255, 230, 200, 0.4)");
+    highlight.addColorStop(0.5, "rgba(255, 220, 180, 0.1)");
     highlight.addColorStop(1, "rgba(255, 220, 180, 0)");
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.fillStyle = highlight;
     ctx.fill();
 
-    // Recording ripples
-    if (state === "recording") {
-        const rippleRadius = radius + 20 + Math.sin(orbTime * 2) * 15;
-        ctx.beginPath();
-        ctx.arc(cx, cy, rippleRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(244, 162, 97, ${0.2 + Math.sin(orbTime * 2) * 0.1})`;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
+    // Subtle rim light
+    const rimGrad = ctx.createRadialGradient(cx, cy, radius - 3, cx, cy, radius);
+    rimGrad.addColorStop(0, "rgba(255, 200, 150, 0)");
+    rimGrad.addColorStop(1, "rgba(255, 200, 150, 0.12)");
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = rimGrad;
+    ctx.fill();
 
-    // Thinking rotation dots
+    // Thinking: orbiting dots with trails
     if (state === "thinking") {
         for (let i = 0; i < 3; i++) {
-            const angle = orbTime * 2 + (i * Math.PI * 2) / 3;
-            const dotX = cx + Math.cos(angle) * (radius + 20);
-            const dotY = cy + Math.sin(angle) * (radius + 20);
+            const angle = orbTime * 2.5 + (i * Math.PI * 2) / 3;
+            const dotDist = radius + 18 + Math.sin(orbTime * 1.5 + i) * 4;
+            const dotX = cx + Math.cos(angle) * dotDist;
+            const dotY = cy + Math.sin(angle) * dotDist;
+
+            // Trail
+            for (let t = 0; t < 4; t++) {
+                const trailAngle = angle - t * 0.15;
+                const tx = cx + Math.cos(trailAngle) * dotDist;
+                const ty = cy + Math.sin(trailAngle) * dotDist;
+                ctx.beginPath();
+                ctx.arc(tx, ty, 2.5 - t * 0.5, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(244, 162, 97, ${0.5 - t * 0.12})`;
+                ctx.fill();
+            }
+
+            // Main dot
             ctx.beginPath();
             ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(244, 162, 97, ${0.4 + Math.sin(orbTime * 3 + i) * 0.3})`;
+            ctx.fillStyle = "rgba(255, 200, 150, 0.8)";
             ctx.fill();
         }
     }
 
-    animFrame = requestAnimationFrame(drawOrb);
+    // Speaking: waveform ring
+    if (state === "speaking") {
+        ctx.beginPath();
+        const segments = 60;
+        for (let i = 0; i <= segments; i++) {
+            const angle = (i / segments) * Math.PI * 2;
+            const wave = Math.sin(orbTime * 5 + i * 0.5) * 4 + Math.sin(orbTime * 3.3 + i * 0.3) * 2;
+            const r = radius + 12 + wave;
+            const x = cx + Math.cos(angle) * r;
+            const y = cy + Math.sin(angle) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = "rgba(244, 180, 120, 0.3)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    requestAnimationFrame(drawOrb);
 }

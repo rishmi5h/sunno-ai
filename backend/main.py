@@ -2,23 +2,28 @@ import asyncio
 import base64
 import json
 import logging
-import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
-from config import MAX_CONVERSATION_TURNS
+from database import init_db, cleanup_expired, ensure_session, save_message, get_conversation_history
+from emotion_detector import detect_emotion
 from voice_pipeline import process_voice
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Sunno")
 
-# In-memory session store (SQLite in Phase 2)
-sessions: dict[str, list[dict]] = {}
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    await cleanup_expired()
+    yield
+
+
+app = FastAPI(title="Sunno", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -30,9 +35,7 @@ async def health():
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await websocket.accept()
     logger.info(f"WebSocket connected: {session_id}")
-
-    if session_id not in sessions:
-        sessions[session_id] = []
+    await ensure_session(session_id)
 
     audio_buffer = bytearray()
 
@@ -53,11 +56,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 audio_bytes = bytes(audio_buffer)
                 audio_buffer.clear()
 
-                # Send thinking state
                 await websocket.send_json({"type": "thinking"})
 
-                # Process through voice pipeline
-                conversation_history = sessions[session_id]
+                # Get conversation history from DB
+                conversation_history = await get_conversation_history(session_id)
+
                 transcript, response_text, audio = await process_voice(
                     audio_bytes, conversation_history,
                 )
@@ -76,13 +79,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     "text": transcript,
                 })
 
-                # Update conversation history
-                conversation_history.append({"role": "user", "content": transcript})
-                conversation_history.append({"role": "assistant", "content": response_text})
-
-                # Trim to last N turns
-                if len(conversation_history) > MAX_CONVERSATION_TURNS * 2:
-                    sessions[session_id] = conversation_history[-(MAX_CONVERSATION_TURNS * 2):]
+                # Persist to DB
+                emotion = detect_emotion(transcript)
+                await save_message(session_id, "user", transcript, emotion)
+                await save_message(session_id, "assistant", response_text)
 
                 # Send response text (for accessibility)
                 await websocket.send_json({

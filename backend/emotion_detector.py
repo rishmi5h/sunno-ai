@@ -1,30 +1,55 @@
 EMOTION_KEYWORDS = {
     "angry": [
-        "angry", "furious", "pissed", "mad", "hate", "gussa", "frustrated",
-        "annoying", "unfair", "bullshit", "bakwas", "pagal",
+        "angry", "furious", "pissed", "mad", "hate", "frustrated",
+        "annoying", "unfair", "bullshit", "ridiculous", "sick of",
+        # Hinglish
+        "gussa", "pagal", "bakwas", "bewkoof", "chutiya", "saala",
+        "nafrat", "kameena", "harami", "jhooth", "dhoka",
     ],
     "sad": [
-        "sad", "crying", "miss", "lonely", "hurt", "broken", "dukhi",
-        "rona", "akela", "pain", "lost", "empty", "hollow",
+        "sad", "crying", "miss", "lonely", "hurt", "broken",
+        "lost", "empty", "hollow", "grief", "depressed", "hopeless",
+        "nobody cares", "all alone", "don't matter",
+        # Hinglish
+        "dukhi", "rona", "akela", "toot gaya", "toot gayi", "dard",
+        "koi nahi hai", "takleef", "udaas", "tang aa gaya", "tang aa gayi",
     ],
     "anxious": [
-        "anxious", "worried", "scared", "panic", "nervous", "tension",
-        "darr", "ghabra", "stress", "can't breathe", "overthinking",
+        "anxious", "worried", "scared", "panic", "nervous",
+        "can't breathe", "overthinking", "restless", "what if",
+        "freaking out", "losing my mind",
+        # Hinglish
+        "tension", "darr", "ghabra", "neend nahi", "chain nahi",
+        "dimag kharab", "pareshaan", "soch soch ke",
     ],
     "frustrated": [
-        "stuck", "tired", "exhausted", "done", "give up", "thak gaya",
-        "fed up", "enough", "can't take", "bas", "ho gaya",
+        "stuck", "tired", "exhausted", "done", "give up",
+        "fed up", "enough", "can't take", "over it", "burned out",
+        "no point", "waste of time",
+        # Hinglish
+        "thak gaya", "thak gayi", "bas", "ho gaya", "ho gayi",
+        "kya fayda", "bekar", "sar dard",
+    ],
+    "numb": [
+        "numb", "don't feel", "nothing matters", "don't care",
+        "whatever", "blank", "shutdown", "zombie",
+        # Hinglish
+        "kuch feel nahi", "sab bekar", "farq nahi padta",
+        "koi matlab nahi", "sab same",
     ],
     "positive": [
-        "happy", "good", "better", "khush", "relieved", "grateful",
-        "thanks", "shukriya", "accha laga", "nice",
+        "happy", "good", "better", "relieved", "grateful",
+        "thanks", "laugh", "smile", "excited", "proud",
+        # Hinglish
+        "khush", "shukriya", "accha laga", "maza aa gaya",
+        "theek", "badiya", "sahi hai",
     ],
 }
 
 
 def detect_emotion(transcript: str) -> str:
-    """Simple keyword-based emotion detection.
-    Returns: 'angry', 'sad', 'anxious', 'frustrated', 'positive', or 'neutral'
+    """Keyword-based emotion detection with Hinglish support.
+    Returns: 'angry', 'sad', 'anxious', 'frustrated', 'numb', 'positive', or 'neutral'
     """
     text = transcript.lower()
     scores = {}
