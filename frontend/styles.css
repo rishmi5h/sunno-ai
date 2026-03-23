@@ -22,7 +22,6 @@ html, body {
     font-family: 'DM Sans', sans-serif;
     background: var(--bg-warm);
     color: var(--text);
-    overflow: hidden;
     -webkit-tap-highlight-color: transparent;
     -webkit-user-select: none;
     user-select: none;
@@ -32,7 +31,7 @@ html, body {
 .screen {
     display: none;
     width: 100%;
-    height: 100%;
+    min-height: 100%;
     position: absolute;
     top: 0;
     left: 0;
@@ -46,19 +45,21 @@ html, body {
 #landing {
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     text-align: center;
-    padding: 2rem;
-    background: radial-gradient(ellipse at 50% 40%, #1a1520 0%, var(--bg-warm) 70%);
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: radial-gradient(ellipse at 50% 20%, #1a1520 0%, var(--bg-warm) 70%);
 }
 
 .landing-content {
-    flex: 1;
+    min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 1.5rem;
+    padding: 2rem;
 }
 
 .logo {
@@ -97,8 +98,39 @@ html, body {
     transform: scale(0.97);
 }
 
-.landing-footer {
+/* ── Explainer (below fold) ── */
+.landing-explainer {
+    display: flex;
+    gap: 1.5rem;
+    padding: 3rem 2rem 2rem;
+    max-width: 700px;
+    width: 100%;
+}
+
+.explainer-card {
+    flex: 1;
     padding: 1.5rem;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.explainer-card h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--amber);
+    margin-bottom: 0.5rem;
+}
+
+.explainer-card p {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+
+/* ── Footer ── */
+.landing-footer {
+    padding: 2rem 2rem 3rem;
     text-align: center;
 }
 .landing-footer p {
@@ -109,12 +141,17 @@ html, body {
     color: var(--lavender);
     text-decoration: none;
 }
+.footer-note {
+    margin-top: 0.5rem;
+    opacity: 0.6;
+}
 
 /* ── Session ── */
 #session {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
     background: radial-gradient(ellipse at 50% 35%, #161218 0%, var(--bg-warm) 60%);
 }
 
@@ -125,6 +162,7 @@ html, body {
     justify-content: center;
     gap: 2.5rem;
     width: 100%;
+    height: 100%;
     padding: 2rem;
 }
 
@@ -184,7 +222,7 @@ html, body {
 }
 
 /* ── Mobile adjustments ── */
-@media (max-width: 480px) {
+@media (max-width: 600px) {
     .logo {
         font-size: 4rem;
     }
@@ -195,6 +233,10 @@ html, body {
     .tagline {
         font-size: 1rem;
         max-width: 280px;
+    }
+    .landing-explainer {
+        flex-direction: column;
+        padding: 2rem 1.5rem;
     }
 }
 
