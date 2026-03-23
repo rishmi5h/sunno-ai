@@ -2,7 +2,6 @@
 
 A voice-first web app that just listens. Not a chatbot. Not a therapist. Think of it as the digital version of a friend who says "damn, that sucks" and lets you talk.
 
-Inspired by the man on Mumbai beach who went viral charging ₹250-₹1000 just to listen to people's problems.
 
 ## How it works
 
