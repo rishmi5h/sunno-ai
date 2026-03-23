@@ -1,7 +1,9 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "NIXPACKS",
+    "watchPatterns": ["backend/**"],
+    "buildCommand": "cd backend && pip install -r requirements.txt"
   },
   "deploy": {
     "startCommand": "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT",
