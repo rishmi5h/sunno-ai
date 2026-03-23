@@ -40,10 +40,16 @@ async function initSession() {
     drawOrb();
 }
 
+// ── Backend URL ──
+// Set BACKEND_URL for split deploy (Netlify frontend + Railway backend)
+// Falls back to same-origin for local dev or single-server deploy
+const BACKEND_HOST = window.BACKEND_URL || location.host;
+
 // ── WebSocket ──
 function connectWebSocket() {
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${location.host}/ws/${sessionId}`;
+    const isSecure = location.protocol === "https:" || BACKEND_HOST.includes("railway.app");
+    const protocol = isSecure ? "wss:" : "ws:";
+    const url = `${protocol}//${BACKEND_HOST}/ws/${sessionId}`;
     ws = new WebSocket(url);
 
     ws.onopen = () => console.log("WS connected");
