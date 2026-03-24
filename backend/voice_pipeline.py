@@ -9,6 +9,8 @@ from deepgram import DeepgramClient
 from elevenlabs import ElevenLabs
 from elevenlabs.types import VoiceSettings
 
+from groq import Groq
+
 from config import (
     ANTHROPIC_API_KEY,
     CLAUDE_MODEL,
@@ -16,6 +18,8 @@ from config import (
     ELEVENLABS_API_KEY,
     ELEVENLABS_MODEL_ID,
     ELEVENLABS_VOICE_ID,
+    GROQ_API_KEY,
+    GROQ_MODEL,
 )
 from emotion_detector import detect_emotion
 from listener_prompt import LISTENER_SYSTEM_PROMPT
@@ -27,6 +31,7 @@ logger = logging.getLogger(__name__)
 _deepgram = None
 _anthropic = None
 _elevenlabs = None
+_groq = None
 
 
 def get_deepgram():
@@ -48,6 +53,13 @@ def get_elevenlabs():
     if _elevenlabs is None:
         _elevenlabs = ElevenLabs(api_key=ELEVENLABS_API_KEY)
     return _elevenlabs
+
+
+def get_groq():
+    global _groq
+    if _groq is None:
+        _groq = Groq(api_key=GROQ_API_KEY)
+    return _groq
 
 
 async def transcribe_audio(audio_bytes: bytes) -> str:
@@ -105,6 +117,44 @@ async def generate_response_streaming(
             full_text += text
 
     logger.info(f"LLM took {time.monotonic() - t0:.2f}s: '{full_text}'")
+    return full_text
+
+
+async def generate_response_groq(
+    transcript: str,
+    conversation_history: list[dict],
+) -> str:
+    """Generate a listener response using Groq (Llama) as a fast free fallback."""
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not set. Add it to your .env file.")
+
+    safety_response = check_safety(transcript)
+    if safety_response:
+        return safety_response
+
+    emotion = detect_emotion(transcript)
+    emotion_context = f"[The person seems to be feeling {emotion}.]" if emotion != "neutral" else ""
+
+    messages = [{"role": "system", "content": LISTENER_SYSTEM_PROMPT}]
+    for turn in conversation_history:
+        messages.append({"role": turn["role"], "content": turn["content"]})
+
+    user_content = transcript
+    if emotion_context:
+        user_content = f"{emotion_context}\n\n{transcript}"
+    messages.append({"role": "user", "content": user_content})
+
+    t0 = time.monotonic()
+    response = await asyncio.to_thread(
+        lambda: get_groq().chat.completions.create(
+            model=GROQ_MODEL,
+            messages=messages,
+            max_tokens=150,
+            temperature=0.8,
+        )
+    )
+    full_text = response.choices[0].message.content
+    logger.info(f"Groq LLM took {time.monotonic() - t0:.2f}s: '{full_text}'")
     return full_text
 
 

@@ -4,6 +4,10 @@
     box-sizing: border-box;
 }
 
+.hidden {
+    display: none !important;
+}
+
 :root {
     --bg: #0a0a0f;
     --bg-warm: #0f0d12;
@@ -146,6 +150,84 @@ html, body {
     opacity: 0.6;
 }
 
+/* ── Setup Screen (Model Download) ── */
+#setup {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at 50% 40%, #1a1520 0%, var(--bg-warm) 70%);
+}
+
+.setup-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+    padding: 2rem;
+    max-width: 400px;
+}
+
+.setup-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--amber);
+}
+
+.setup-desc {
+    font-size: 0.95rem;
+    color: var(--text-dim);
+}
+
+.setup-size {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+}
+
+.progress-container {
+    width: 100%;
+    margin-top: 1rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--amber), #e07a3a);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+    margin-top: 0.5rem;
+}
+
+.skip-btn {
+    margin-top: 1.5rem;
+    padding: 0.6rem 1.5rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 100px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+}
+.skip-btn:hover {
+    color: var(--text);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
 /* ── Session ── */
 #session {
     flex-direction: column;
@@ -187,6 +269,19 @@ html, body {
     display: block;
 }
 
+/* Mode indicator */
+.mode-indicator {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    opacity: 0.4;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
 .status-text {
     font-size: 0.95rem;
     color: var(--text-dim);
@@ -215,10 +310,260 @@ html, body {
     opacity: 0.5;
 }
 
+/* ── Settings Gear Button ── */
+.settings-btn {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    color: var(--text-faint);
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 50%;
+    transition: color 0.2s, background 0.2s;
+    z-index: 10;
+}
+.settings-btn:hover {
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Download Banner ── */
+.download-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(15, 13, 18, 0.95);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 1rem 1.5rem;
+    z-index: 50;
+    animation: slideUp 0.4s ease-out;
+}
+.download-banner.hidden {
+    display: none;
+}
+.banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    max-width: 500px;
+    margin: 0 auto;
+}
+.banner-text {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.4;
+}
+.banner-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+.banner-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: none;
+    border-radius: 100px;
+    cursor: pointer;
+    padding: 0.5rem 1rem;
+    transition: transform 0.15s, opacity 0.2s;
+}
+.banner-btn:active {
+    transform: scale(0.96);
+}
+.banner-btn.primary {
+    background: var(--amber);
+    color: var(--bg);
+}
+.banner-btn.secondary {
+    background: transparent;
+    color: var(--text-faint);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.banner-progress {
+    max-width: 500px;
+    margin: 0.75rem auto 0;
+}
+.banner-progress.hidden {
+    display: none;
+}
+
+/* ── Settings Panel ── */
+.settings-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 340px;
+    max-width: 90vw;
+    background: #12101a;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    animation: slideInRight 0.3s ease-out;
+    overflow-y: auto;
+}
+.settings-panel.hidden {
+    display: none;
+}
+.settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.settings-header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+.settings-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    line-height: 1;
+    border-radius: 6px;
+    transition: color 0.2s, background 0.2s;
+}
+.settings-close:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+}
+.settings-body {
+    padding: 1rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+.settings-section h3 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
+}
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0;
+}
+.settings-row.sub-row {
+    padding-left: 0.5rem;
+    border-left: 2px solid rgba(255, 255, 255, 0.04);
+    margin-left: 0.25rem;
+}
+.settings-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.label-text {
+    font-size: 0.9rem;
+    color: var(--text);
+}
+.label-sub {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+}
+
+/* Toggle button */
+.toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+.toggle-track {
+    display: block;
+    width: 44px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    position: relative;
+    transition: background 0.25s;
+}
+.toggle-btn[data-state="on"] .toggle-track {
+    background: var(--amber);
+}
+.toggle-thumb {
+    display: block;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.25s;
+}
+.toggle-btn[data-state="on"] .toggle-thumb {
+    transform: translateX(20px);
+}
+
+/* Action buttons in settings */
+.action-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 0.4rem 0.9rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
+    color: var(--amber);
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+.action-btn:hover {
+    background: rgba(244, 162, 97, 0.08);
+    border-color: var(--amber-dim);
+}
+.action-btn.danger {
+    color: var(--danger);
+    border-color: rgba(231, 111, 81, 0.2);
+}
+.action-btn.danger:hover {
+    background: rgba(231, 111, 81, 0.08);
+}
+
+.settings-about {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-bottom: 0.25rem;
+}
+.settings-about.dim {
+    color: var(--text-faint);
+    font-size: 0.75rem;
+}
+.settings-about a {
+    color: var(--lavender);
+    text-decoration: none;
+}
+
 /* ── Animations ── */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+}
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
 }
 
 /* ── Mobile adjustments ── */

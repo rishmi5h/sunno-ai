@@ -1,3 +1,6 @@
+// ── Sunno: Cloud-First Voice App ──
+// Cloud by default, with option to download local AI model for offline/private use
+
 // ── State ──
 let ws = null;
 let mediaRecorder = null;
@@ -7,6 +10,9 @@ let sessionId = crypto.randomUUID();
 let state = "idle"; // idle | recording | thinking | speaking
 let analyser = null;
 let audioDataArray = null;
+let recognition = null; // Web Speech API
+let caps = null; // Device capabilities
+let isDownloading = false;
 
 // ── DOM ──
 const landing = document.getElementById("landing");
@@ -16,6 +22,29 @@ const orbCanvas = document.getElementById("orb");
 const statusEl = document.getElementById("status");
 const transcriptArea = document.getElementById("transcript-area");
 const ctx = orbCanvas.getContext("2d");
+const modeIndicator = document.getElementById("mode-indicator");
+
+// Settings panel
+const settingsBtn = document.getElementById("settings-btn");
+const settingsPanel = document.getElementById("settings-panel");
+const settingsClose = document.getElementById("settings-close");
+const llmToggle = document.getElementById("llm-toggle");
+const llmStatus = document.getElementById("llm-status");
+const llmDownloadRow = document.getElementById("llm-download-row");
+const llmDownloadBtn = document.getElementById("llm-download-btn");
+const llmProgressRow = document.getElementById("llm-progress-row");
+const llmCachedRow = document.getElementById("llm-cached-row");
+const llmDeleteBtn = document.getElementById("llm-delete-btn");
+const settingsProgressFill = document.getElementById("settings-progress-fill");
+const settingsProgressText = document.getElementById("settings-progress-text");
+
+// Download banner
+const downloadBanner = document.getElementById("download-banner");
+const bannerDownload = document.getElementById("banner-download");
+const bannerDismiss = document.getElementById("banner-dismiss");
+const bannerProgress = document.getElementById("banner-progress");
+const bannerProgressFill = document.getElementById("banner-progress-fill");
+const bannerProgressText = document.getElementById("banner-progress-text");
 
 // HiDPI canvas
 function setupCanvas() {
@@ -26,26 +55,71 @@ function setupCanvas() {
     ctx.scale(dpr, dpr);
 }
 
-// ── Landing → Session ──
+// ── Landing → Session (always cloud-first, no setup screen) ──
 startBtn.addEventListener("click", async () => {
     landing.classList.remove("active");
-    session.classList.add("active");
-    await initSession();
+
+    // Detect capabilities (respects user preference from localStorage)
+    caps = await SunnoCapabilities.detect();
+
+    // Always go straight to session — no model download blocking
+    startSession();
 });
 
-async function initSession() {
+async function startSession() {
+    session.classList.add("active");
     setupCanvas();
-    connectWebSocket();
+
+    // Show mode indicator
+    updateModeIndicator();
+
+    // Set up TTS voice if using on-device
+    if (caps.tts === "speech-synthesis" && caps.bestTTSVoice) {
+        SunnoTTS.setVoice(caps.bestTTSVoice);
+    }
+
+    // Set up STT
+    if (caps.stt === "web-speech") {
+        setupWebSpeech();
+    }
+
+    // Always request mic
     await requestMicPermission();
+
+    // Connect WebSocket only if we need cloud STT or TTS
+    if (caps.stt === "cloud" || caps.tts === "cloud") {
+        connectWebSocket();
+    }
+
+    // If LLM is webllm and model is cached, init the engine
+    if (caps.llm === "webllm") {
+        SunnoLLM.init().catch(() => {
+            // Failed to init, fall back to groq
+            caps.llm = "groq";
+            updateModeIndicator();
+        });
+    }
+
     drawOrb();
 }
 
-// ── Backend URL ──
-// Set BACKEND_URL for split deploy (Netlify frontend + Railway backend)
-// Falls back to same-origin for local dev or single-server deploy
+function updateModeIndicator() {
+    if (!modeIndicator) return;
+    const parts = [];
+    if (caps.stt === "web-speech") parts.push("STT: on-device");
+    else parts.push("STT: cloud");
+    if (caps.llm === "webllm") parts.push("LLM: on-device");
+    else if (caps.llm === "groq") parts.push("LLM: Groq");
+    else parts.push("LLM: cloud");
+    if (caps.tts === "speech-synthesis") parts.push("TTS: on-device");
+    else parts.push("TTS: cloud");
+    modeIndicator.textContent = parts.join(" · ");
+}
+
+// ── Backend URL (for cloud fallback) ──
 const BACKEND_HOST = window.BACKEND_URL || location.host;
 
-// ── WebSocket ──
+// ── WebSocket (cloud fallback path) ──
 function connectWebSocket() {
     const isSecure = location.protocol === "https:" || BACKEND_HOST.includes("railway.app");
     const protocol = isSecure ? "wss:" : "ws:";
@@ -53,21 +127,18 @@ function connectWebSocket() {
     ws = new WebSocket(url);
 
     ws.onopen = () => console.log("WS connected");
-
     ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         handleServerMessage(msg);
     };
-
     ws.onclose = () => {
         console.log("WS disconnected, reconnecting...");
         setTimeout(connectWebSocket, 2000);
     };
-
     ws.onerror = (err) => console.error("WS error:", err);
 }
 
-// ── Audio chunks for playback ──
+// ── Cloud fallback audio playback ──
 let audioQueue = [];
 let isPlaying = false;
 
@@ -76,24 +147,19 @@ function handleServerMessage(msg) {
         case "transcript":
             showTranscript(msg.text, "user");
             break;
-
         case "thinking":
             setState("thinking");
             break;
-
         case "response_text":
             showTranscript(msg.text, "ai");
             break;
-
         case "audio_chunk":
             audioQueue.push(base64ToArrayBuffer(msg.data));
             if (!isPlaying) playAudioQueue();
             break;
-
         case "done":
             if (!isPlaying) setState("idle");
             break;
-
         case "error":
             statusEl.textContent = msg.message;
             setTimeout(() => setState("idle"), 2000);
@@ -104,7 +170,6 @@ function handleServerMessage(msg) {
 function showTranscript(text, who) {
     transcriptArea.textContent = text;
     transcriptArea.className = `transcript-area ${who}`;
-    // Fade out after a delay
     clearTimeout(transcriptArea._fadeTimer);
     transcriptArea.style.opacity = "0.7";
     transcriptArea._fadeTimer = setTimeout(() => {
@@ -159,6 +224,156 @@ function base64ToArrayBuffer(base64) {
     return bytes.buffer;
 }
 
+// ── Web Speech API (on-device STT) ──
+function setupWebSpeech() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    recognition = new SpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+        let interimTranscript = "";
+        let finalTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            if (result.isFinal) {
+                finalTranscript += result[0].transcript;
+            } else {
+                interimTranscript += result[0].transcript;
+            }
+        }
+
+        if (interimTranscript) {
+            showTranscript(interimTranscript, "user");
+        }
+
+        if (finalTranscript) {
+            showTranscript(finalTranscript, "user");
+            isRecording = false;
+            setState("thinking");
+            processLocalPipeline(finalTranscript);
+        }
+    };
+
+    recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        if (event.error === "no-speech") {
+            setState("idle");
+            statusEl.textContent = "Didn't catch that. Try again?";
+            setTimeout(() => {
+                if (state === "idle") statusEl.textContent = "Tap to talk";
+            }, 2000);
+        } else {
+            setState("idle");
+        }
+        isRecording = false;
+    };
+
+    recognition.onend = () => {
+        if (isRecording) {
+            isRecording = false;
+            setState("idle");
+        }
+    };
+}
+
+// ── On-Device Pipeline ──
+async function processLocalPipeline(transcript) {
+    if (!transcript.trim()) {
+        setState("idle");
+        return;
+    }
+
+    // Track message count for download banner
+    const msgCount = SunnoStorage.incrementMessageCount();
+
+    // Safety check (client-side)
+    const safetyResponse = SunnoSafety.checkSafety(transcript);
+    if (safetyResponse) {
+        showTranscript(safetyResponse, "ai");
+        await speakResponse(safetyResponse);
+        return;
+    }
+
+    // Detect emotion
+    const emotion = SunnoSafety.detectEmotion(transcript);
+
+    // Get conversation history from local storage
+    const history = SunnoStorage.getHistory(sessionId);
+
+    let responseText;
+    try {
+        if (caps.llm === "webllm" && SunnoLLM.getIsReady()) {
+            responseText = await SunnoLLM.generate(transcript, history, emotion);
+        } else if (caps.llm === "groq") {
+            responseText = await callGroqAPI(transcript, history);
+        } else {
+            sendAudioToCloud(transcript);
+            return;
+        }
+    } catch (err) {
+        console.error("LLM error:", err);
+        statusEl.textContent = "Something went wrong. Try again?";
+        setTimeout(() => setState("idle"), 2000);
+        return;
+    }
+
+    showTranscript(responseText, "ai");
+
+    // Save to local history
+    SunnoStorage.saveMessage(sessionId, "user", transcript);
+    SunnoStorage.saveMessage(sessionId, "assistant", responseText);
+
+    // Speak the response
+    await speakResponse(responseText);
+
+    // Show download banner after 3 messages if device supports local and model not cached
+    if (msgCount >= 3 && !isDownloading) {
+        maybeShowDownloadBanner();
+    }
+}
+
+async function callGroqAPI(transcript, history) {
+    const backendUrl = window.BACKEND_URL || "";
+    const base = backendUrl ? `https://${backendUrl}` : "";
+    const response = await fetch(`${base}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            transcript,
+            conversation_history: history,
+            session_id: sessionId,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Groq API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.response_text;
+}
+
+async function speakResponse(text) {
+    if (caps.tts === "speech-synthesis") {
+        setState("speaking");
+        try {
+            await SunnoTTS.speak(text, {
+                onStart: () => setState("speaking"),
+                onEnd: () => setState("idle"),
+            });
+        } catch {
+            setState("idle");
+        }
+    } else {
+        setState("idle");
+    }
+}
+
 // ── Microphone ──
 async function requestMicPermission() {
     try {
@@ -188,7 +403,7 @@ function getAudioLevel() {
     for (let i = 0; i < audioDataArray.length; i++) {
         sum += audioDataArray[i];
     }
-    return sum / audioDataArray.length / 255; // 0-1
+    return sum / audioDataArray.length / 255;
 }
 
 function setupRecorder(stream) {
@@ -199,9 +414,7 @@ function setupRecorder(stream) {
     });
 
     mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-            audioChunks.push(e.data);
-        }
+        if (e.data.size > 0) audioChunks.push(e.data);
     };
 
     mediaRecorder.onstop = async () => {
@@ -227,7 +440,7 @@ function arrayBufferToBase64(buffer) {
     return btoa(binary);
 }
 
-// ── Tap to Record (toggle) + Hold to talk ──
+// ── Tap to Record / Hold to talk ──
 const orbContainer = document.getElementById("orb-container");
 let holdTimer = null;
 let isHolding = false;
@@ -236,7 +449,6 @@ orbContainer.addEventListener("pointerdown", (e) => {
     if (state === "thinking" || state === "speaking") return;
     e.preventDefault();
 
-    // Start hold-to-talk timer
     isHolding = false;
     holdTimer = setTimeout(() => {
         isHolding = true;
@@ -249,11 +461,9 @@ orbContainer.addEventListener("pointerup", (e) => {
     clearTimeout(holdTimer);
 
     if (isHolding) {
-        // Was hold-to-talk, stop on release
         if (isRecording) stopRecording();
         isHolding = false;
     } else {
-        // Was a tap — toggle
         if (state === "thinking" || state === "speaking") return;
         if (isRecording) {
             stopRecording();
@@ -272,20 +482,42 @@ orbContainer.addEventListener("pointerleave", () => {
 });
 
 function startRecording() {
-    if (!mediaRecorder || mediaRecorder.state === "recording") return;
-    audioChunks = [];
-    mediaRecorder.start();
-    isRecording = true;
-    setState("recording");
-    if (navigator.vibrate) navigator.vibrate(30);
+    if (caps && caps.stt === "web-speech" && recognition) {
+        try {
+            recognition.start();
+            isRecording = true;
+            setState("recording");
+            if (navigator.vibrate) navigator.vibrate(30);
+        } catch (err) {
+            console.error("Speech recognition start error:", err);
+        }
+    } else {
+        if (!mediaRecorder || mediaRecorder.state === "recording") return;
+        audioChunks = [];
+        mediaRecorder.start();
+        isRecording = true;
+        setState("recording");
+        if (navigator.vibrate) navigator.vibrate(30);
+    }
 }
 
 function stopRecording() {
-    if (!mediaRecorder || mediaRecorder.state !== "recording") return;
-    mediaRecorder.stop();
-    isRecording = false;
-    setState("thinking");
-    if (navigator.vibrate) navigator.vibrate(20);
+    if (caps && caps.stt === "web-speech" && recognition) {
+        try {
+            recognition.stop();
+        } catch {
+            // Ignore if already stopped
+        }
+        isRecording = false;
+        setState("thinking");
+        if (navigator.vibrate) navigator.vibrate(20);
+    } else {
+        if (!mediaRecorder || mediaRecorder.state !== "recording") return;
+        mediaRecorder.stop();
+        isRecording = false;
+        setState("thinking");
+        if (navigator.vibrate) navigator.vibrate(20);
+    }
 }
 
 // ── State Management ──
@@ -309,6 +541,208 @@ function setState(newState) {
     }
 }
 
+// ══════════════════════════════════════════════
+// ── Download Banner Logic ──
+// ══════════════════════════════════════════════
+
+async function maybeShowDownloadBanner() {
+    // Don't show if already dismissed, already local, or device can't run it
+    const dismissed = SunnoStorage.getPreference("banner_dismissed", false);
+    if (dismissed) return;
+    if (caps.llm === "webllm") return;
+
+    const local = SunnoCapabilities.canGoLocal();
+    if (!local.llm) return;
+
+    const cached = await SunnoCapabilities.isModelCached();
+    if (cached) return;
+
+    // Show the banner
+    downloadBanner.classList.remove("hidden");
+}
+
+bannerDownload.addEventListener("click", () => {
+    startModelDownload("banner");
+});
+
+bannerDismiss.addEventListener("click", () => {
+    downloadBanner.classList.add("hidden");
+    SunnoStorage.setPreference("banner_dismissed", true);
+});
+
+function startModelDownload(source) {
+    if (isDownloading) return;
+    isDownloading = true;
+
+    // Update UI based on source
+    if (source === "banner") {
+        downloadBanner.querySelector(".banner-content").style.display = "none";
+        bannerProgress.classList.remove("hidden");
+    } else {
+        llmDownloadRow.classList.add("hidden");
+        llmProgressRow.classList.remove("hidden");
+    }
+
+    SunnoLLM.setProgressCallback(({ text, progress }) => {
+        const pct = Math.round(progress * 100);
+        // Update banner progress
+        if (bannerProgressFill) bannerProgressFill.style.width = `${pct}%`;
+        if (bannerProgressText) bannerProgressText.textContent = text || `${pct}%`;
+        // Update settings progress
+        if (settingsProgressFill) settingsProgressFill.style.width = `${pct}%`;
+        if (settingsProgressText) settingsProgressText.textContent = text || `${pct}%`;
+    });
+
+    SunnoLLM.init()
+        .then(() => {
+            isDownloading = false;
+
+            // Switch to local LLM
+            caps.llm = "webllm";
+            SunnoStorage.setPreference("llm_mode", "local");
+            updateModeIndicator();
+
+            // Hide banner
+            downloadBanner.classList.add("hidden");
+
+            // Update settings panel
+            refreshSettingsUI();
+
+            // Brief notification
+            statusEl.textContent = "Local AI ready!";
+            setTimeout(() => {
+                if (state === "idle") statusEl.textContent = "Tap to talk";
+            }, 3000);
+        })
+        .catch((err) => {
+            console.error("Model download failed:", err);
+            isDownloading = false;
+
+            // Reset banner
+            if (source === "banner") {
+                downloadBanner.querySelector(".banner-content").style.display = "flex";
+                bannerProgress.classList.add("hidden");
+            }
+
+            // Reset settings
+            llmProgressRow.classList.add("hidden");
+            llmDownloadRow.classList.remove("hidden");
+        });
+}
+
+// ══════════════════════════════════════════════
+// ── Settings Panel Logic ──
+// ══════════════════════════════════════════════
+
+settingsBtn.addEventListener("click", () => {
+    refreshSettingsUI();
+    settingsPanel.classList.remove("hidden");
+});
+
+settingsClose.addEventListener("click", () => {
+    settingsPanel.classList.add("hidden");
+});
+
+// Close settings when clicking outside
+settingsPanel.addEventListener("click", (e) => {
+    if (e.target === settingsPanel) {
+        settingsPanel.classList.add("hidden");
+    }
+});
+
+llmToggle.addEventListener("click", async () => {
+    const currentState = llmToggle.getAttribute("data-state");
+
+    if (currentState === "off") {
+        // User wants local — check if possible
+        const local = SunnoCapabilities.canGoLocal();
+        if (!local.llm) {
+            llmStatus.textContent = "Your device doesn't support on-device AI";
+            return;
+        }
+
+        const cached = await SunnoLLM.isModelCached();
+        if (cached) {
+            // Model cached — switch to local
+            llmToggle.setAttribute("data-state", "on");
+            caps.llm = "webllm";
+            SunnoStorage.setPreference("llm_mode", "local");
+            updateModeIndicator();
+
+            // Init engine if not ready
+            if (!SunnoLLM.getIsReady()) {
+                SunnoLLM.init().catch(() => {
+                    caps.llm = "groq";
+                    llmToggle.setAttribute("data-state", "off");
+                    updateModeIndicator();
+                    refreshSettingsUI();
+                });
+            }
+        } else {
+            // Model not cached — show download option
+            llmToggle.setAttribute("data-state", "on");
+        }
+        refreshSettingsUI();
+    } else {
+        // User wants cloud
+        llmToggle.setAttribute("data-state", "off");
+        caps.llm = "groq";
+        SunnoStorage.setPreference("llm_mode", "cloud");
+        updateModeIndicator();
+        refreshSettingsUI();
+    }
+});
+
+llmDownloadBtn.addEventListener("click", () => {
+    startModelDownload("settings");
+});
+
+llmDeleteBtn.addEventListener("click", async () => {
+    await SunnoLLM.deleteModel();
+    caps.llm = "groq";
+    SunnoStorage.setPreference("llm_mode", "cloud");
+    llmToggle.setAttribute("data-state", "off");
+    updateModeIndicator();
+    refreshSettingsUI();
+    // Re-enable download banner for future
+    SunnoStorage.setPreference("banner_dismissed", false);
+});
+
+async function refreshSettingsUI() {
+    const local = SunnoCapabilities.canGoLocal();
+    const cached = await SunnoLLM.isModelCached();
+    const isLocal = caps.llm === "webllm";
+
+    // Toggle state
+    llmToggle.setAttribute("data-state", isLocal ? "on" : "off");
+
+    // Status text
+    if (!local.llm) {
+        llmStatus.textContent = "Device doesn't support on-device AI";
+        llmToggle.style.opacity = "0.4";
+        llmToggle.style.pointerEvents = "none";
+    } else if (isLocal && cached) {
+        llmStatus.textContent = "Running on your device";
+    } else if (cached) {
+        llmStatus.textContent = "Model downloaded · using cloud";
+    } else {
+        llmStatus.textContent = "Uses cloud by default";
+    }
+
+    // Show/hide sub-rows
+    llmDownloadRow.classList.add("hidden");
+    llmProgressRow.classList.add("hidden");
+    llmCachedRow.classList.add("hidden");
+
+    if (cached) {
+        llmCachedRow.classList.remove("hidden");
+    } else if (isDownloading) {
+        llmProgressRow.classList.remove("hidden");
+    } else if (local.llm && llmToggle.getAttribute("data-state") === "on") {
+        llmDownloadRow.classList.remove("hidden");
+    }
+}
+
 // ── Orb Animation ──
 let orbTime = 0;
 let smoothRadius = 80;
@@ -316,7 +750,6 @@ let smoothGlow = 0.12;
 let targetRadius = 80;
 let targetGlow = 0.12;
 
-// Particle system for ambient floaters
 const particles = [];
 for (let i = 0; i < 20; i++) {
     particles.push({
@@ -340,10 +773,8 @@ function drawOrb() {
     orbTime += 0.016;
     ctx.clearRect(0, 0, w, h);
 
-    // Audio-reactive amplitude
     const audioLevel = state === "recording" ? getAudioLevel() : 0;
 
-    // Target values by state
     if (state === "idle") {
         targetRadius = baseRadius + Math.sin(orbTime * 1.2) * 4;
         targetGlow = 0.1 + Math.sin(orbTime * 0.8) * 0.03;
@@ -358,7 +789,6 @@ function drawOrb() {
         targetGlow = 0.2 + Math.sin(orbTime * 4) * 0.08;
     }
 
-    // Smooth interpolation
     smoothRadius += (targetRadius - smoothRadius) * 0.12;
     smoothGlow += (targetGlow - smoothGlow) * 0.1;
     const radius = smoothRadius;
@@ -386,7 +816,7 @@ function drawOrb() {
         ctx.fill();
     }
 
-    // Recording ripples (multiple expanding rings)
+    // Recording ripples
     if (state === "recording") {
         for (let i = 0; i < 3; i++) {
             const t = (orbTime * 0.8 + i * 1.2) % 3.6;
@@ -400,7 +830,7 @@ function drawOrb() {
         }
     }
 
-    // Orb body — layered gradient for depth
+    // Orb body
     const orbGrad = ctx.createRadialGradient(cx - radius * 0.15, cy - radius * 0.2, 0, cx, cy, radius);
     orbGrad.addColorStop(0, "#ffc58a");
     orbGrad.addColorStop(0.3, "#f4a261");
@@ -412,7 +842,7 @@ function drawOrb() {
     ctx.fillStyle = orbGrad;
     ctx.fill();
 
-    // Soft inner light (shifts with time for organic feel)
+    // Soft inner light
     const lightX = cx - radius * 0.2 + Math.sin(orbTime * 0.5) * 8;
     const lightY = cy - radius * 0.25 + Math.cos(orbTime * 0.7) * 5;
     const highlight = ctx.createRadialGradient(lightX, lightY, 0, cx, cy, radius * 0.7);
@@ -433,7 +863,7 @@ function drawOrb() {
     ctx.fillStyle = rimGrad;
     ctx.fill();
 
-    // Thinking: orbiting dots with trails
+    // Thinking: orbiting dots
     if (state === "thinking") {
         for (let i = 0; i < 3; i++) {
             const angle = orbTime * 2.5 + (i * Math.PI * 2) / 3;
@@ -441,7 +871,6 @@ function drawOrb() {
             const dotX = cx + Math.cos(angle) * dotDist;
             const dotY = cy + Math.sin(angle) * dotDist;
 
-            // Trail
             for (let t = 0; t < 4; t++) {
                 const trailAngle = angle - t * 0.15;
                 const tx = cx + Math.cos(trailAngle) * dotDist;
@@ -452,7 +881,6 @@ function drawOrb() {
                 ctx.fill();
             }
 
-            // Main dot
             ctx.beginPath();
             ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
             ctx.fillStyle = "rgba(255, 200, 150, 0.8)";

@@ -7,10 +7,11 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from database import init_db, cleanup_expired, ensure_session, save_message, get_conversation_history
 from emotion_detector import detect_emotion
-from voice_pipeline import process_voice_streaming
+from voice_pipeline import process_voice_streaming, generate_response_groq
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,6 +38,34 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# ── REST endpoint for Groq fallback (used by edge frontend) ──
+class ChatRequest(BaseModel):
+    transcript: str
+    conversation_history: list[dict] = []
+    session_id: str = ""
+
+
+class ChatResponse(BaseModel):
+    response_text: str
+    emotion: str = "neutral"
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat_endpoint(req: ChatRequest):
+    """Groq-powered chat endpoint for devices without WebGPU."""
+    response_text = await generate_response_groq(req.transcript, req.conversation_history)
+
+    emotion = detect_emotion(req.transcript)
+
+    # Optionally persist to DB
+    if req.session_id:
+        await ensure_session(req.session_id)
+        await save_message(req.session_id, "user", req.transcript, emotion)
+        await save_message(req.session_id, "assistant", response_text)
+
+    return ChatResponse(response_text=response_text, emotion=emotion)
 
 
 @app.websocket("/ws/{session_id}")

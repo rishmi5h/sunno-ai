@@ -35,7 +35,7 @@
             </div>
             <div class="explainer-card">
                 <h3>Private</h3>
-                <p>No accounts. No data stored. Conversations auto-delete after 24 hours.</p>
+                <p>No accounts. No data stored. Everything runs on your device.</p>
             </div>
         </div>
 
@@ -45,9 +45,36 @@
         </footer>
     </div>
 
+    <!-- Setup screen (model download) -->
+    <div id="setup" class="screen">
+        <div class="setup-content">
+            <h2 class="setup-title">Setting up Sunno</h2>
+            <p class="setup-desc">Downloading AI model for on-device listening</p>
+            <p class="setup-size">~1.5 GB · one time only · stays on your device</p>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <p id="progress-text" class="progress-text">Preparing...</p>
+            </div>
+            <button id="skip-setup" class="skip-btn">Skip — use cloud instead</button>
+        </div>
+    </div>
+
     <!-- Session screen -->
     <div id="session" class="screen">
         <div class="session-container">
+            <!-- Mode indicator (subtle) -->
+            <p id="mode-indicator" class="mode-indicator"></p>
+
+            <!-- Settings gear -->
+            <button id="settings-btn" class="settings-btn" aria-label="Settings">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                </svg>
+            </button>
+
             <!-- The orb -->
             <div id="orb-container">
                 <canvas id="orb" width="300" height="300"></canvas>
@@ -59,10 +86,106 @@
             <!-- Subtle transcript (for accessibility) -->
             <div id="transcript-area" class="transcript-area" aria-live="polite"></div>
         </div>
+
+        <!-- Download banner (shown after a few conversations) -->
+        <div id="download-banner" class="download-banner hidden">
+            <div class="banner-content">
+                <p class="banner-text">Go offline? Download AI for faster, private conversations</p>
+                <div class="banner-actions">
+                    <button id="banner-download" class="banner-btn primary">Download</button>
+                    <button id="banner-dismiss" class="banner-btn secondary">Later</button>
+                </div>
+            </div>
+            <div id="banner-progress" class="banner-progress hidden">
+                <div class="progress-bar">
+                    <div id="banner-progress-fill" class="progress-fill"></div>
+                </div>
+                <p id="banner-progress-text" class="progress-text">Downloading...</p>
+            </div>
+        </div>
     </div>
 
-    <!-- Set your Railway backend URL here after deploying -->
+    <!-- Settings panel (slide-in overlay) -->
+    <div id="settings-panel" class="settings-panel hidden">
+        <div class="settings-header">
+            <h2>Settings</h2>
+            <button id="settings-close" class="settings-close" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="settings-body">
+            <!-- LLM toggle -->
+            <div class="settings-section">
+                <h3>AI Model</h3>
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <span class="label-text">On-device AI</span>
+                        <span id="llm-status" class="label-sub">Uses cloud by default</span>
+                    </div>
+                    <button id="llm-toggle" class="toggle-btn" data-state="off">
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    </button>
+                </div>
+                <div id="llm-download-row" class="settings-row sub-row hidden">
+                    <div class="settings-label">
+                        <span class="label-text">Download model</span>
+                        <span id="llm-size" class="label-sub">~1.8 GB · one time</span>
+                    </div>
+                    <button id="llm-download-btn" class="action-btn">Download</button>
+                </div>
+                <div id="llm-progress-row" class="settings-row sub-row hidden">
+                    <div class="progress-container" style="width:100%">
+                        <div class="progress-bar">
+                            <div id="settings-progress-fill" class="progress-fill"></div>
+                        </div>
+                        <p id="settings-progress-text" class="progress-text">Downloading...</p>
+                    </div>
+                </div>
+                <div id="llm-cached-row" class="settings-row sub-row hidden">
+                    <div class="settings-label">
+                        <span class="label-text">Model cached</span>
+                        <span id="llm-cached-size" class="label-sub">~1.8 GB on device</span>
+                    </div>
+                    <button id="llm-delete-btn" class="action-btn danger">Delete</button>
+                </div>
+            </div>
+
+            <!-- About -->
+            <div class="settings-section">
+                <h3>About</h3>
+                <p class="settings-about">Sunno is a voice AI that just listens. No advice, no judgment.</p>
+                <p class="settings-about dim">Conversations are not stored on any server. Auto-deleted after 24 hours.</p>
+            </div>
+
+            <!-- Crisis info -->
+            <div class="settings-section">
+                <h3>Need help?</h3>
+                <p class="settings-about">iCall: <a href="tel:9152987821">9152987821</a></p>
+                <p class="settings-about">Vandrevala Foundation: <a href="tel:18602662345">1860-2662-345</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Set your Railway backend URL here for cloud fallback -->
     <script>window.BACKEND_URL = "";</script>
+
+    <!-- Edge modules -->
+    <script src="capabilities.js"></script>
+    <script src="listener-prompt.js"></script>
+    <script src="safety.js"></script>
+    <script src="local-storage.js"></script>
+    <script src="edge-llm.js"></script>
+    <script src="edge-tts.js"></script>
+
+    <!-- Main app -->
     <script src="app.js"></script>
+
+    <!-- Service Worker registration -->
+    <script>
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("/sw.js").catch(() => {});
+            });
+        }
+    </script>
 </body>
 </html>
