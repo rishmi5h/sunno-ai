@@ -2,7 +2,7 @@
 nixPkgs = ["python312"]
 
 [phases.install]
-cmds = ["cd backend && python -m pip install -r requirements.txt"]
+cmds = ["python -m pip install -r requirements.txt"]
 
 [start]
-cmd = "cd backend && python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
+cmd = "python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
