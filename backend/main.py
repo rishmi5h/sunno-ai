@@ -131,6 +131,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             pass
 
 
-# Serve frontend — must be last
+# Serve frontend — only if directory exists (frontend is on Netlify in production)
 frontend_path = Path(__file__).resolve().parent.parent / "frontend"
-app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+if frontend_path.is_dir():
+    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
