@@ -312,13 +312,13 @@ async function processLocalPipeline(transcript) {
         } else if (caps.llm === "groq") {
             responseText = await callGroqAPI(transcript, history);
         } else {
-            sendAudioToCloud(transcript);
-            return;
+            // Fallback: try Groq API anyway
+            responseText = await callGroqAPI(transcript, history);
         }
     } catch (err) {
-        console.error("LLM error:", err);
-        statusEl.textContent = "Something went wrong. Try again?";
-        setTimeout(() => setState("idle"), 2000);
+        console.error("LLM error:", err.message, err.stack);
+        statusEl.textContent = `Error: ${err.message || "Something went wrong"}`;
+        setTimeout(() => setState("idle"), 4000);
         return;
     }
 
