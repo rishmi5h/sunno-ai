@@ -735,10 +735,11 @@ function refreshSettingsUI() {
 
     // Status text
     if (!local.llm) {
-        llmStatus.textContent = "Not available — needs WebGPU (try Chrome/Edge)";
+        llmStatus.textContent = "Not available on this device — needs WebGPU (try Chrome on desktop)";
         llmStatus.style.color = "#e07a5f";
         llmToggle.style.opacity = "0.3";
         llmToggle.style.pointerEvents = "none";
+        llmToggle.setAttribute("data-state", "off");
     } else if (isLocal) {
         llmStatus.textContent = "Running on your device";
     } else if (toggleState === "on") {
