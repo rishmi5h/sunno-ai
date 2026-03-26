@@ -657,7 +657,12 @@ llmToggle.addEventListener("click", async () => {
         // User wants local — check if possible
         const local = SunnoCapabilities.canGoLocal();
         if (!local.llm) {
-            llmStatus.textContent = "Your device doesn't support on-device AI";
+            llmStatus.textContent = "Your device doesn't support on-device AI (needs WebGPU)";
+            llmStatus.style.color = "#e07a5f";
+            setTimeout(() => {
+                llmStatus.textContent = "Uses cloud by default";
+                llmStatus.style.color = "";
+            }, 3000);
             return;
         }
 
