@@ -650,7 +650,18 @@ settingsPanel.addEventListener("click", (e) => {
     }
 });
 
-llmToggle.addEventListener("click", async () => {
+let toggleBusy = false;
+llmToggle.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (toggleBusy) return;
+    toggleBusy = true;
+    setTimeout(() => { toggleBusy = false; }, 300);
+
+    // Ensure capabilities are detected
+    if (!caps) {
+        caps = await SunnoCapabilities.detect();
+    }
+
     const currentState = llmToggle.getAttribute("data-state");
 
     if (currentState === "off") {
@@ -666,32 +677,33 @@ llmToggle.addEventListener("click", async () => {
             return;
         }
 
-        const cached = await SunnoLLM.isModelCached();
-        if (cached) {
-            // Model cached — switch to local
-            llmToggle.setAttribute("data-state", "on");
-            caps.llm = "webllm";
-            SunnoStorage.setPreference("llm_mode", "local");
-            updateModeIndicator();
+        // Toggle ON — check if model is already cached
+        llmToggle.setAttribute("data-state", "on");
 
-            // Init engine if not ready
-            if (!SunnoLLM.getIsReady()) {
-                SunnoLLM.init().catch(() => {
-                    caps.llm = "groq";
-                    llmToggle.setAttribute("data-state", "off");
-                    updateModeIndicator();
-                    refreshSettingsUI();
-                });
-            }
+        if (caps.llm === "webllm" || SunnoLLM.getIsReady()) {
+            // Already running local
         } else {
-            // Model not cached — show download option
-            llmToggle.setAttribute("data-state", "on");
+            // Try to init if cached, otherwise show download option
+            SunnoLLM.isModelCached().then(cached => {
+                if (cached) {
+                    caps.llm = "webllm";
+                    SunnoStorage.setPreference("llm_mode", "local");
+                    updateModeIndicator();
+                    SunnoLLM.init().catch(() => {
+                        caps.llm = "groq";
+                        llmToggle.setAttribute("data-state", "off");
+                        updateModeIndicator();
+                        refreshSettingsUI();
+                    });
+                }
+                refreshSettingsUI();
+            });
         }
         refreshSettingsUI();
     } else {
         // User wants cloud
         llmToggle.setAttribute("data-state", "off");
-        caps.llm = "groq";
+        if (caps) caps.llm = "groq";
         SunnoStorage.setPreference("llm_mode", "cloud");
         updateModeIndicator();
         refreshSettingsUI();
@@ -713,23 +725,20 @@ llmDeleteBtn.addEventListener("click", async () => {
     SunnoStorage.setPreference("banner_dismissed", false);
 });
 
-async function refreshSettingsUI() {
+function refreshSettingsUI() {
     const local = SunnoCapabilities.canGoLocal();
-    const cached = await SunnoLLM.isModelCached();
-    const isLocal = caps.llm === "webllm";
-
-    // Toggle state
-    llmToggle.setAttribute("data-state", isLocal ? "on" : "off");
+    const isLocal = caps && caps.llm === "webllm";
+    const toggleState = llmToggle.getAttribute("data-state");
 
     // Status text
     if (!local.llm) {
         llmStatus.textContent = "Device doesn't support on-device AI";
         llmToggle.style.opacity = "0.4";
         llmToggle.style.pointerEvents = "none";
-    } else if (isLocal && cached) {
+    } else if (isLocal) {
         llmStatus.textContent = "Running on your device";
-    } else if (cached) {
-        llmStatus.textContent = "Model downloaded · using cloud";
+    } else if (toggleState === "on") {
+        llmStatus.textContent = "Download model to use on-device AI";
     } else {
         llmStatus.textContent = "Uses cloud by default";
     }
@@ -739,11 +748,11 @@ async function refreshSettingsUI() {
     llmProgressRow.classList.add("hidden");
     llmCachedRow.classList.add("hidden");
 
-    if (cached) {
+    if (isLocal) {
         llmCachedRow.classList.remove("hidden");
     } else if (isDownloading) {
         llmProgressRow.classList.remove("hidden");
-    } else if (local.llm && llmToggle.getAttribute("data-state") === "on") {
+    } else if (local.llm && toggleState === "on") {
         llmDownloadRow.classList.remove("hidden");
     }
 }
