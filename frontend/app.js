@@ -634,7 +634,10 @@ function startModelDownload(source) {
 // ── Settings Panel Logic ──
 // ══════════════════════════════════════════════
 
-settingsBtn.addEventListener("click", () => {
+settingsBtn.addEventListener("click", async () => {
+    if (!caps) {
+        caps = await SunnoCapabilities.detect();
+    }
     refreshSettingsUI();
     settingsPanel.classList.remove("hidden");
 });
@@ -732,8 +735,9 @@ function refreshSettingsUI() {
 
     // Status text
     if (!local.llm) {
-        llmStatus.textContent = "Device doesn't support on-device AI";
-        llmToggle.style.opacity = "0.4";
+        llmStatus.textContent = "Not available — needs WebGPU (try Chrome/Edge)";
+        llmStatus.style.color = "#e07a5f";
+        llmToggle.style.opacity = "0.3";
         llmToggle.style.pointerEvents = "none";
     } else if (isLocal) {
         llmStatus.textContent = "Running on your device";
