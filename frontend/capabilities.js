@@ -86,44 +86,48 @@ const SunnoCapabilities = (() => {
         };
     }
 
+    function isFullyOfflineCapable() {
+        return caps.stt === "web-speech" &&
+               caps.tts === "speech-synthesis" &&
+               caps.llm === "webllm";
+    }
+
+    function scoreVoice(v) {
+        return (v.localService ? 10 : 0) +
+            (v.lang.includes("IN") ? 5 : 0) +
+            (v.lang.includes("en") ? 2 : 0) +
+            (v.name.includes("Google") ? 3 : 0) +
+            (v.name.includes("Samantha") ? 3 : 0) +
+            (v.name.includes("Rishi") ? 4 : 0) +
+            (v.name.includes("Veena") ? 4 : 0) +
+            (v.name.toLowerCase().includes("india") ? 3 : 0);
+    }
+
+    function getAvailableVoices() {
+        const voices = speechSynthesis.getVoices();
+        return voices
+            .filter(v => v.lang.startsWith("en") || v.lang.startsWith("hi"))
+            .map(v => ({ voice: v, score: scoreVoice(v) }))
+            .sort((a, b) => b.score - a.score);
+    }
+
     function selectBestVoice() {
         return new Promise((resolve) => {
             const trySelect = () => {
-                const voices = speechSynthesis.getVoices();
-                if (voices.length === 0) return null;
-
-                const scored = voices
-                    .filter(v => v.lang.startsWith("en") || v.lang.startsWith("hi"))
-                    .map(v => ({
-                        voice: v,
-                        score:
-                            (v.localService ? 10 : 0) +
-                            (v.lang.includes("IN") ? 5 : 0) +
-                            (v.lang.includes("en") ? 2 : 0) +
-                            (v.name.includes("Google") ? 3 : 0) +
-                            (v.name.includes("Samantha") ? 3 : 0) +
-                            (v.name.includes("Rishi") ? 4 : 0) +
-                            (v.name.includes("Veena") ? 4 : 0) +
-                            (v.name.toLowerCase().includes("india") ? 3 : 0),
-                    }))
-                    .sort((a, b) => b.score - a.score);
-
+                const scored = getAvailableVoices();
                 return scored.length > 0 ? scored[0].voice : null;
             };
 
-            // Voices may not be loaded yet
             const result = trySelect();
             if (result) {
                 resolve(result);
                 return;
             }
 
-            // Wait for voiceschanged event
             if (speechSynthesis.onvoiceschanged !== undefined) {
                 speechSynthesis.onvoiceschanged = () => {
                     resolve(trySelect());
                 };
-                // Timeout fallback
                 setTimeout(() => resolve(trySelect()), 2000);
             } else {
                 setTimeout(() => resolve(trySelect()), 500);
@@ -131,5 +135,5 @@ const SunnoCapabilities = (() => {
         });
     }
 
-    return { detect, caps, canGoLocal, isModelCached };
+    return { detect, caps, canGoLocal, isModelCached, isFullyOfflineCapable, getAvailableVoices };
 })();

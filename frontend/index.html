@@ -67,6 +67,12 @@
             <!-- Mode indicator (subtle) -->
             <p id="mode-indicator" class="mode-indicator"></p>
 
+            <!-- Offline indicator -->
+            <div id="offline-indicator" class="offline-indicator hidden">
+                <span class="offline-dot"></span>
+                <span>Offline</span>
+            </div>
+
             <!-- Settings gear -->
             <button id="settings-btn" class="settings-btn" aria-label="Settings">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -149,6 +155,47 @@
                 </div>
             </div>
 
+            <!-- Voice Selection -->
+            <div class="settings-section">
+                <h3>Voice</h3>
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <span class="label-text">AI Voice</span>
+                        <span id="voice-status" class="label-sub">Auto-selected</span>
+                    </div>
+                </div>
+                <div id="voice-list" class="voice-list"></div>
+            </div>
+
+            <!-- Ambient Sound -->
+            <div class="settings-section">
+                <h3>Ambient Sound</h3>
+                <div class="settings-row">
+                    <div id="ambient-options" class="ambient-options">
+                        <button class="ambient-pill active" data-sound="silence">Silence</button>
+                        <button class="ambient-pill" data-sound="rain">Rain</button>
+                        <button class="ambient-pill" data-sound="lofi">Lo-fi</button>
+                        <button class="ambient-pill" data-sound="crickets">Crickets</button>
+                    </div>
+                </div>
+                <div id="ambient-volume-row" class="settings-row hidden">
+                    <span class="label-text">Volume</span>
+                    <input type="range" id="ambient-volume" min="0" max="100" value="50" class="ambient-slider">
+                </div>
+            </div>
+
+            <!-- Connection -->
+            <div class="settings-section">
+                <h3>Connection</h3>
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <span class="label-text">Status</span>
+                        <span id="connection-status" class="label-sub">Connected</span>
+                    </div>
+                    <span id="connection-dot" class="connection-dot online"></span>
+                </div>
+            </div>
+
             <!-- About -->
             <div class="settings-section">
                 <h3>About</h3>
@@ -175,6 +222,7 @@
     <script src="local-storage.js"></script>
     <script src="edge-llm.js"></script>
     <script src="edge-tts.js"></script>
+    <script src="ambient.js"></script>
 
     <!-- Main app -->
     <script src="app.js"></script>

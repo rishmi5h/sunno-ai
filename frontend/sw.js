@@ -1,7 +1,7 @@
 // ── Sunno Service Worker ──
 // Caches app shell for offline support. WebLLM model files are cached by the library itself.
 
-const CACHE_NAME = "sunno-v5";
+const CACHE_NAME = "sunno-v6";
 const APP_SHELL = [
     "/",
     "/index.html",
@@ -13,6 +13,7 @@ const APP_SHELL = [
     "/local-storage.js",
     "/edge-llm.js",
     "/edge-tts.js",
+    "/ambient.js",
     "/manifest.json",
     "/assets/icon-192.png",
     "/assets/icon-512.png",
@@ -52,16 +53,32 @@ self.addEventListener("fetch", (event) => {
     }
 
     // Skip WebLLM model downloads (let the library handle caching)
-    if (url.hostname.includes("huggingface") || url.hostname.includes("cdn.jsdelivr")) {
+    if (url.hostname.includes("huggingface") || url.hostname.includes("cdn.jsdelivr") || url.hostname.includes("esm.run")) {
         return;
     }
 
-    // Cache-first for app shell assets
+    // Cache Google Fonts on first fetch (for offline support)
+    if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
+        event.respondWith(
+            caches.match(event.request).then((cached) => {
+                if (cached) return cached;
+                return fetch(event.request).then((response) => {
+                    if (response.ok) {
+                        const clone = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                    }
+                    return response;
+                }).catch(() => cached || new Response("", { status: 503 }));
+            })
+        );
+        return;
+    }
+
+    // Cache-first for app shell assets, with offline fallback
     event.respondWith(
         caches.match(event.request).then((cached) => {
             if (cached) return cached;
             return fetch(event.request).then((response) => {
-                // Cache successful responses for same-origin
                 if (response.ok && url.origin === self.location.origin) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => {
@@ -69,6 +86,12 @@ self.addEventListener("fetch", (event) => {
                     });
                 }
                 return response;
+            }).catch(() => {
+                // Offline fallback: serve cached index.html for navigation requests
+                if (event.request.mode === "navigate") {
+                    return caches.match("/index.html");
+                }
+                return new Response("", { status: 503 });
             });
         })
     );

@@ -13,6 +13,7 @@ let audioDataArray = null;
 let recognition = null; // Web Speech API
 let caps = null; // Device capabilities
 let isDownloading = false;
+let isOnline = navigator.onLine;
 
 // ── DOM ──
 const landing = document.getElementById("landing");
@@ -38,6 +39,20 @@ const llmDeleteBtn = document.getElementById("llm-delete-btn");
 const settingsProgressFill = document.getElementById("settings-progress-fill");
 const settingsProgressText = document.getElementById("settings-progress-text");
 
+// Voice selection
+const voiceList = document.getElementById("voice-list");
+const voiceStatus = document.getElementById("voice-status");
+
+// Ambient sound
+const ambientOptions = document.getElementById("ambient-options");
+const ambientVolumeRow = document.getElementById("ambient-volume-row");
+const ambientVolume = document.getElementById("ambient-volume");
+
+// Offline / connection
+const offlineIndicator = document.getElementById("offline-indicator");
+const connectionStatus = document.getElementById("connection-status");
+const connectionDot = document.getElementById("connection-dot");
+
 // Download banner
 const downloadBanner = document.getElementById("download-banner");
 const bannerDownload = document.getElementById("banner-download");
@@ -45,6 +60,44 @@ const bannerDismiss = document.getElementById("banner-dismiss");
 const bannerProgress = document.getElementById("banner-progress");
 const bannerProgressFill = document.getElementById("banner-progress-fill");
 const bannerProgressText = document.getElementById("banner-progress-text");
+
+// ── Online/Offline Detection ──
+window.addEventListener("online", () => {
+    isOnline = true;
+    onConnectivityChange();
+});
+window.addEventListener("offline", () => {
+    isOnline = false;
+    onConnectivityChange();
+});
+
+function onConnectivityChange() {
+    // Update offline indicator
+    if (offlineIndicator) {
+        offlineIndicator.classList.toggle("hidden", isOnline);
+    }
+    // Update settings connection status
+    if (connectionStatus) {
+        connectionStatus.textContent = isOnline ? "Connected" : "Offline";
+    }
+    if (connectionDot) {
+        connectionDot.className = `connection-dot ${isOnline ? "online" : "offline"}`;
+    }
+
+    if (isOnline) {
+        // Reconnect WebSocket if needed
+        if (caps && (caps.stt === "cloud" || caps.tts === "cloud") && (!ws || ws.readyState !== WebSocket.OPEN)) {
+            connectWebSocket();
+        }
+    } else {
+        // Close WebSocket gracefully
+        if (ws) {
+            ws.onclose = null; // Prevent auto-reconnect
+            ws.close();
+            ws = null;
+        }
+    }
+}
 
 // HiDPI canvas
 function setupCanvas() {
@@ -73,9 +126,20 @@ async function startSession() {
     // Show mode indicator
     updateModeIndicator();
 
-    // Set up TTS voice if using on-device
-    if (caps.tts === "speech-synthesis" && caps.bestTTSVoice) {
-        SunnoTTS.setVoice(caps.bestTTSVoice);
+    // Set up TTS voice — check saved preference first
+    if (caps.tts === "speech-synthesis") {
+        const savedVoiceURI = SunnoStorage.getPreference("selected_voice_uri", null);
+        if (savedVoiceURI) {
+            const voices = speechSynthesis.getVoices();
+            const saved = voices.find(v => v.voiceURI === savedVoiceURI);
+            if (saved) {
+                SunnoTTS.setVoice(saved);
+            } else if (caps.bestTTSVoice) {
+                SunnoTTS.setVoice(caps.bestTTSVoice);
+            }
+        } else if (caps.bestTTSVoice) {
+            SunnoTTS.setVoice(caps.bestTTSVoice);
+        }
     }
 
     // Set up STT
@@ -86,19 +150,30 @@ async function startSession() {
     // Always request mic
     await requestMicPermission();
 
-    // Connect WebSocket only if we need cloud STT or TTS
-    if (caps.stt === "cloud" || caps.tts === "cloud") {
+    // Connect WebSocket only if online and we need cloud STT or TTS
+    if (isOnline && (caps.stt === "cloud" || caps.tts === "cloud")) {
         connectWebSocket();
     }
 
     // If LLM is webllm and model is cached, init the engine
     if (caps.llm === "webllm") {
         SunnoLLM.init().catch(() => {
-            // Failed to init, fall back to groq
             caps.llm = "groq";
             updateModeIndicator();
         });
     }
+
+    // Start ambient sound if user had a preference
+    const savedAmbient = SunnoStorage.getPreference("ambient_sound", "silence");
+    const savedVolume = SunnoStorage.getPreference("ambient_volume", 50);
+    SunnoAmbient.setVolume(savedVolume / 100);
+    if (savedAmbient !== "silence") {
+        SunnoAmbient.setSound(savedAmbient);
+        SunnoAmbient.start();
+    }
+
+    // Update offline indicator
+    onConnectivityChange();
 
     drawOrb();
 }
@@ -121,6 +196,8 @@ const BACKEND_HOST = window.BACKEND_URL || location.host;
 
 // ── WebSocket (cloud fallback path) ──
 function connectWebSocket() {
+    if (!isOnline) return;
+
     const isSecure = location.protocol === "https:" || BACKEND_HOST.includes("railway.app");
     const protocol = isSecure ? "wss:" : "ws:";
     const url = `${protocol}//${BACKEND_HOST}/ws/${sessionId}`;
@@ -132,8 +209,10 @@ function connectWebSocket() {
         handleServerMessage(msg);
     };
     ws.onclose = () => {
-        console.log("WS disconnected, reconnecting...");
-        setTimeout(connectWebSocket, 2000);
+        console.log("WS disconnected");
+        if (isOnline) {
+            setTimeout(connectWebSocket, 2000);
+        }
     };
     ws.onerror = (err) => console.error("WS error:", err);
 }
@@ -309,10 +388,12 @@ async function processLocalPipeline(transcript) {
     try {
         if (caps.llm === "webllm" && SunnoLLM.getIsReady()) {
             responseText = await SunnoLLM.generate(transcript, history, emotion);
-        } else if (caps.llm === "groq") {
-            responseText = await callGroqAPI(transcript, history);
+        } else if (!isOnline) {
+            // Offline and no local model
+            statusEl.textContent = "You're offline. Download the AI model to use Sunno offline.";
+            setTimeout(() => setState("idle"), 4000);
+            return;
         } else {
-            // Fallback: try Groq API anyway
             responseText = await callGroqAPI(transcript, history);
         }
     } catch (err) {
@@ -733,7 +814,7 @@ function refreshSettingsUI() {
     const isLocal = caps && caps.llm === "webllm";
     const toggleState = llmToggle.getAttribute("data-state");
 
-    // Status text
+    // LLM Status text
     if (!local.llm) {
         llmStatus.textContent = "Not available on this device — needs WebGPU (try Chrome on desktop)";
         llmStatus.style.color = "#e07a5f";
@@ -760,7 +841,139 @@ function refreshSettingsUI() {
     } else if (local.llm && toggleState === "on") {
         llmDownloadRow.classList.remove("hidden");
     }
+
+    // Voice list
+    refreshVoiceUI();
+
+    // Ambient
+    refreshAmbientUI();
+
+    // Connection
+    if (connectionStatus) {
+        connectionStatus.textContent = isOnline ? "Connected" : "Offline";
+    }
+    if (connectionDot) {
+        connectionDot.className = `connection-dot ${isOnline ? "online" : "offline"}`;
+    }
 }
+
+// ── Voice Selection UI ──
+function refreshVoiceUI() {
+    if (!voiceList) return;
+    voiceList.innerHTML = "";
+
+    const scored = SunnoCapabilities.getAvailableVoices();
+    if (scored.length === 0) {
+        voiceStatus.textContent = "No voices available";
+        return;
+    }
+
+    const currentVoice = SunnoTTS.getVoice();
+    const currentURI = currentVoice ? currentVoice.voiceURI : null;
+    const bestVoice = caps ? caps.bestTTSVoice : null;
+    const bestURI = bestVoice ? bestVoice.voiceURI : null;
+
+    // Group by language
+    const groups = {};
+    for (const { voice } of scored) {
+        const lang = voice.lang.startsWith("hi") ? "Hindi" : "English";
+        if (!groups[lang]) groups[lang] = [];
+        groups[lang].push(voice);
+    }
+
+    for (const [lang, voices] of Object.entries(groups)) {
+        const label = document.createElement("div");
+        label.className = "voice-group-label";
+        label.textContent = lang;
+        voiceList.appendChild(label);
+
+        for (const voice of voices) {
+            const item = document.createElement("div");
+            item.className = "voice-item" + (voice.voiceURI === currentURI ? " selected" : "");
+
+            const name = document.createElement("span");
+            name.className = "voice-item-name";
+            name.textContent = voice.name;
+
+            if (voice.voiceURI === bestURI) {
+                const auto = document.createElement("span");
+                auto.className = "voice-item-auto";
+                auto.textContent = "(Auto)";
+                name.appendChild(auto);
+            }
+
+            const preview = document.createElement("button");
+            preview.className = "voice-item-preview";
+            preview.textContent = "\u25B6";
+            preview.title = "Preview";
+            preview.addEventListener("click", (e) => {
+                e.stopPropagation();
+                SunnoTTS.preview("Hi, I'm here to listen.", voice);
+            });
+
+            const check = document.createElement("span");
+            check.className = "voice-item-check";
+            check.textContent = voice.voiceURI === currentURI ? "\u2713" : "";
+
+            item.appendChild(name);
+            item.appendChild(preview);
+            item.appendChild(check);
+
+            item.addEventListener("click", () => {
+                SunnoTTS.setVoice(voice);
+                SunnoStorage.setPreference("selected_voice_uri", voice.voiceURI);
+                voiceStatus.textContent = voice.name;
+                refreshVoiceUI();
+            });
+
+            voiceList.appendChild(item);
+        }
+    }
+
+    if (currentVoice) {
+        voiceStatus.textContent = currentVoice.name;
+    }
+}
+
+// ── Ambient Sound UI ──
+function refreshAmbientUI() {
+    const current = SunnoAmbient.getSound();
+    const pills = ambientOptions.querySelectorAll(".ambient-pill");
+    pills.forEach(pill => {
+        pill.classList.toggle("active", pill.dataset.sound === current);
+    });
+
+    // Show volume row only when a sound is active
+    if (ambientVolumeRow) {
+        ambientVolumeRow.classList.toggle("hidden", current === "silence");
+    }
+
+    // Sync slider
+    if (ambientVolume) {
+        ambientVolume.value = Math.round(SunnoAmbient.getVolume() * 100);
+    }
+}
+
+// Ambient pill click handlers
+ambientOptions.addEventListener("click", (e) => {
+    const pill = e.target.closest(".ambient-pill");
+    if (!pill) return;
+
+    const sound = pill.dataset.sound;
+    SunnoAmbient.setSound(sound);
+    if (sound !== "silence") {
+        SunnoAmbient.start();
+    }
+    SunnoStorage.setPreference("ambient_sound", sound);
+    refreshAmbientUI();
+});
+
+// Volume slider
+ambientVolume.addEventListener("input", () => {
+    const val = parseInt(ambientVolume.value, 10);
+    SunnoAmbient.setVolume(val / 100);
+    SunnoStorage.setPreference("ambient_volume", val);
+});
 
 // ── Orb Animation ──
 let orbTime = 0;

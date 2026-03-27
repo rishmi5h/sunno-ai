@@ -65,9 +65,23 @@ const SunnoTTS = (() => {
         });
     }
 
+    function getVoice() {
+        return selectedVoice;
+    }
+
+    function preview(text, voice) {
+        speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        if (voice) utterance.voice = voice;
+        utterance.rate = 0.9;
+        utterance.pitch = 0.95;
+        utterance.volume = 1.0;
+        speechSynthesis.speak(utterance);
+    }
+
     function stop() {
         speechSynthesis.cancel();
     }
 
-    return { setVoice, speak, stop };
+    return { setVoice, getVoice, speak, preview, stop };
 })();
