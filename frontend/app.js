@@ -170,6 +170,7 @@ async function startSession() {
 
     // Load saved listener mood
     currentMood = SunnoStorage.getPreference("listener_mood", "default");
+    SunnoTTS.setMood(currentMood);
 
     // Start ambient sound if user had a preference
     const savedAmbient = SunnoStorage.getPreference("ambient_sound", "silence");
@@ -881,6 +882,7 @@ function refreshMoodUI() {
         pill.addEventListener("click", () => {
             currentMood = key;
             SunnoStorage.setPreference("listener_mood", key);
+            SunnoTTS.setMood(key);
             if (moodStatus) moodStatus.textContent = mood.desc;
             refreshMoodUI();
         });
