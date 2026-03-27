@@ -233,6 +233,8 @@
             window.addEventListener("load", () => {
                 navigator.serviceWorker.register("/sw.js").catch(() => {});
             });
+            // One-time cleanup: remove controllerchange listener that old SW code may have set
+            navigator.serviceWorker.addEventListener("controllerchange", () => {}, { once: true });
         }
     </script>
 </body>
