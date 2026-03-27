@@ -39,6 +39,11 @@ const llmDeleteBtn = document.getElementById("llm-delete-btn");
 const settingsProgressFill = document.getElementById("settings-progress-fill");
 const settingsProgressText = document.getElementById("settings-progress-text");
 
+// Listener mood
+const moodOptions = document.getElementById("mood-options");
+const moodStatus = document.getElementById("mood-status");
+let currentMood = "default";
+
 // Voice selection
 const voiceList = document.getElementById("voice-list");
 const voiceStatus = document.getElementById("voice-status");
@@ -162,6 +167,9 @@ async function startSession() {
             updateModeIndicator();
         });
     }
+
+    // Load saved listener mood
+    currentMood = SunnoStorage.getPreference("listener_mood", "default");
 
     // Start ambient sound if user had a preference
     const savedAmbient = SunnoStorage.getPreference("ambient_sound", "silence");
@@ -387,7 +395,7 @@ async function processLocalPipeline(transcript) {
     let responseText;
     try {
         if (caps.llm === "webllm" && SunnoLLM.getIsReady()) {
-            responseText = await SunnoLLM.generate(transcript, history, emotion);
+            responseText = await SunnoLLM.generate(transcript, history, emotion, currentMood);
         } else if (!isOnline) {
             // Offline and no local model
             statusEl.textContent = "You're offline. Download the AI model to use Sunno offline.";
@@ -428,6 +436,7 @@ async function callGroqAPI(transcript, history) {
             transcript,
             conversation_history: history,
             session_id: sessionId,
+            mood: currentMood,
         }),
     });
 
@@ -842,6 +851,9 @@ function refreshSettingsUI() {
         llmDownloadRow.classList.remove("hidden");
     }
 
+    // Mood
+    refreshMoodUI();
+
     // Voice list
     refreshVoiceUI();
 
@@ -855,6 +867,45 @@ function refreshSettingsUI() {
     if (connectionDot) {
         connectionDot.className = `connection-dot ${isOnline ? "online" : "offline"}`;
     }
+}
+
+// ── Listener Mood UI ──
+function refreshMoodUI() {
+    if (!moodOptions) return;
+    moodOptions.innerHTML = "";
+
+    for (const [key, mood] of Object.entries(LISTENER_MOODS)) {
+        const item = document.createElement("div");
+        item.className = "mood-item" + (key === currentMood ? " selected" : "");
+
+        const label = document.createElement("span");
+        label.className = "mood-item-label";
+        label.textContent = mood.label;
+
+        const desc = document.createElement("span");
+        desc.className = "mood-item-desc";
+        desc.textContent = mood.desc;
+
+        const check = document.createElement("span");
+        check.className = "mood-item-check";
+        check.textContent = key === currentMood ? "\u2713" : "";
+
+        item.appendChild(label);
+        item.appendChild(desc);
+        item.appendChild(check);
+
+        item.addEventListener("click", () => {
+            currentMood = key;
+            SunnoStorage.setPreference("listener_mood", key);
+            if (moodStatus) moodStatus.textContent = mood.desc;
+            refreshMoodUI();
+        });
+
+        moodOptions.appendChild(item);
+    }
+
+    const active = LISTENER_MOODS[currentMood];
+    if (moodStatus && active) moodStatus.textContent = active.desc;
 }
 
 // ── Voice Selection UI ──

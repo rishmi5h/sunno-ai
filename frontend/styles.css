@@ -580,6 +580,48 @@ html, body {
     50% { opacity: 0.3; }
 }
 
+/* ── Listener Mood ── */
+.mood-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.mood-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55rem 0.6rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border: 1px solid transparent;
+}
+.mood-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+.mood-item.selected {
+    background: rgba(244, 162, 97, 0.08);
+    border-color: rgba(244, 162, 97, 0.15);
+}
+.mood-item-label {
+    font-size: 0.85rem;
+    color: var(--text);
+}
+.mood-item.selected .mood-item-label {
+    color: var(--amber);
+}
+.mood-item-desc {
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    margin-left: 0.5rem;
+}
+.mood-item-check {
+    font-size: 0.8rem;
+    color: var(--amber);
+    width: 1.2rem;
+    text-align: center;
+}
+
 /* ── Voice List ── */
 .voice-list {
     max-height: 200px;

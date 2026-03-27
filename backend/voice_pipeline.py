@@ -123,6 +123,7 @@ async def generate_response_streaming(
 async def generate_response_groq(
     transcript: str,
     conversation_history: list[dict],
+    mood: str = "default",
 ) -> str:
     """Generate a listener response using Groq (Llama) as a fast free fallback."""
     if not GROQ_API_KEY:
@@ -135,7 +136,9 @@ async def generate_response_groq(
     emotion = detect_emotion(transcript)
     emotion_context = f"[The person seems to be feeling {emotion}.]" if emotion != "neutral" else ""
 
-    messages = [{"role": "system", "content": LISTENER_SYSTEM_PROMPT}]
+    from listener_prompt import get_listener_prompt
+    system_prompt = get_listener_prompt(mood)
+    messages = [{"role": "system", "content": system_prompt}]
     for turn in conversation_history:
         messages.append({"role": turn["role"], "content": turn["content"]})
 

@@ -49,14 +49,17 @@ const SunnoLLM = (() => {
         }
     }
 
-    async function generate(transcript, conversationHistory, emotion) {
+    async function generate(transcript, conversationHistory, emotion, mood) {
         if (!isReady || !engine) {
             throw new Error("WebLLM engine not initialized");
         }
 
         // Build messages in OpenAI chat format (WebLLM uses this)
+        const systemPrompt = (typeof getListenerPrompt === "function")
+            ? getListenerPrompt(mood)
+            : LISTENER_SYSTEM_PROMPT;
         const messages = [
-            { role: "system", content: LISTENER_SYSTEM_PROMPT },
+            { role: "system", content: systemPrompt },
         ];
 
         // Add conversation history
