@@ -128,10 +128,10 @@ async function startSession() {
 
     // Set up TTS voice — check saved preference first
     if (caps.tts === "speech-synthesis") {
-        const savedVoiceURI = SunnoStorage.getPreference("selected_voice_uri", null);
-        if (savedVoiceURI) {
+        const savedKey = SunnoStorage.getPreference("selected_voice_key", null);
+        if (savedKey) {
             const voices = speechSynthesis.getVoices();
-            const saved = voices.find(v => v.voiceURI === savedVoiceURI);
+            const saved = voices.find(v => (v.name + "|" + v.lang) === savedKey);
             if (saved) {
                 SunnoTTS.setVoice(saved);
             } else if (caps.bestTTSVoice) {
@@ -858,6 +858,10 @@ function refreshSettingsUI() {
 }
 
 // ── Voice Selection UI ──
+function voiceKey(v) {
+    return v.name + "|" + v.lang;
+}
+
 function refreshVoiceUI() {
     if (!voiceList) return;
     voiceList.innerHTML = "";
@@ -869,9 +873,9 @@ function refreshVoiceUI() {
     }
 
     const currentVoice = SunnoTTS.getVoice();
-    const currentURI = currentVoice ? currentVoice.voiceURI : null;
+    const currentKey = currentVoice ? voiceKey(currentVoice) : null;
     const bestVoice = caps ? caps.bestTTSVoice : null;
-    const bestURI = bestVoice ? bestVoice.voiceURI : null;
+    const bestKey = bestVoice ? voiceKey(bestVoice) : null;
 
     // Group by language
     const groups = {};
@@ -888,14 +892,18 @@ function refreshVoiceUI() {
         voiceList.appendChild(label);
 
         for (const voice of voices) {
+            const key = voiceKey(voice);
+            const isSelected = key === currentKey;
+            const isBest = key === bestKey;
+
             const item = document.createElement("div");
-            item.className = "voice-item" + (voice.voiceURI === currentURI ? " selected" : "");
+            item.className = "voice-item" + (isSelected ? " selected" : "");
 
             const name = document.createElement("span");
             name.className = "voice-item-name";
             name.textContent = voice.name;
 
-            if (voice.voiceURI === bestURI) {
+            if (isBest) {
                 const auto = document.createElement("span");
                 auto.className = "voice-item-auto";
                 auto.textContent = "(Auto)";
@@ -913,7 +921,7 @@ function refreshVoiceUI() {
 
             const check = document.createElement("span");
             check.className = "voice-item-check";
-            check.textContent = voice.voiceURI === currentURI ? "\u2713" : "";
+            check.textContent = isSelected ? "\u2713" : "";
 
             item.appendChild(name);
             item.appendChild(preview);
@@ -921,7 +929,7 @@ function refreshVoiceUI() {
 
             item.addEventListener("click", () => {
                 SunnoTTS.setVoice(voice);
-                SunnoStorage.setPreference("selected_voice_uri", voice.voiceURI);
+                SunnoStorage.setPreference("selected_voice_key", voiceKey(voice));
                 voiceStatus.textContent = voice.name;
                 refreshVoiceUI();
             });
