@@ -227,27 +227,11 @@
     <!-- Main app -->
     <script src="app.js"></script>
 
-    <!-- Service Worker registration (force update on new versions) -->
+    <!-- Service Worker registration -->
     <script>
         if ("serviceWorker" in navigator) {
             window.addEventListener("load", () => {
-                navigator.serviceWorker.register("/sw.js").then((reg) => {
-                    // Check for updates immediately
-                    reg.update();
-                    // When a new SW is waiting, activate it
-                    if (reg.waiting) {
-                        reg.waiting.postMessage({ type: "SKIP_WAITING" });
-                    }
-                    reg.addEventListener("updatefound", () => {
-                        const newWorker = reg.installing;
-                        newWorker.addEventListener("statechange", () => {
-                            if (newWorker.state === "activated") {
-                                // Reload to get fresh assets
-                                window.location.reload();
-                            }
-                        });
-                    });
-                }).catch(() => {});
+                navigator.serviceWorker.register("/sw.js").catch(() => {});
             });
         }
     </script>
