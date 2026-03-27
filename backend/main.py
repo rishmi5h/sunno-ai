@@ -46,6 +46,7 @@ class ChatRequest(BaseModel):
     conversation_history: list[dict] = []
     session_id: str = ""
     mood: str = "default"
+    language: str = "auto"
 
 
 class ChatResponse(BaseModel):
@@ -56,7 +57,7 @@ class ChatResponse(BaseModel):
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(req: ChatRequest):
     """Groq-powered chat endpoint for devices without WebGPU."""
-    response_text = await generate_response_groq(req.transcript, req.conversation_history, req.mood)
+    response_text = await generate_response_groq(req.transcript, req.conversation_history, req.mood, req.language)
 
     emotion = detect_emotion(req.transcript)
 

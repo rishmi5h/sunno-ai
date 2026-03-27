@@ -39,6 +39,22 @@ const llmDeleteBtn = document.getElementById("llm-delete-btn");
 const settingsProgressFill = document.getElementById("settings-progress-fill");
 const settingsProgressText = document.getElementById("settings-progress-text");
 
+// Language
+const LANGUAGES = {
+    auto:    { label: "Auto",     sttCode: "en-IN", name: "Auto-detect from speech" },
+    en:      { label: "English",  sttCode: "en-IN", name: "English" },
+    hi:      { label: "Hindi",    sttCode: "hi-IN", name: "Hindi" },
+    ta:      { label: "Tamil",    sttCode: "ta-IN", name: "Tamil" },
+    te:      { label: "Telugu",   sttCode: "te-IN", name: "Telugu" },
+    bn:      { label: "Bengali",  sttCode: "bn-IN", name: "Bengali" },
+    mr:      { label: "Marathi",  sttCode: "mr-IN", name: "Marathi" },
+    kn:      { label: "Kannada",  sttCode: "kn-IN", name: "Kannada" },
+    gu:      { label: "Gujarati", sttCode: "gu-IN", name: "Gujarati" },
+};
+const langOptions = document.getElementById("lang-options");
+const langStatus = document.getElementById("lang-status");
+let currentLang = "auto";
+
 // Listener mood
 const moodOptions = document.getElementById("mood-options");
 const moodStatus = document.getElementById("mood-status");
@@ -166,6 +182,12 @@ async function startSession() {
             caps.llm = "groq";
             updateModeIndicator();
         });
+    }
+
+    // Load saved language
+    currentLang = SunnoStorage.getPreference("language", "auto");
+    if (recognition && currentLang !== "auto") {
+        recognition.lang = LANGUAGES[currentLang].sttCode;
     }
 
     // Load saved listener mood
@@ -396,7 +418,7 @@ async function processLocalPipeline(transcript) {
     let responseText;
     try {
         if (caps.llm === "webllm" && SunnoLLM.getIsReady()) {
-            responseText = await SunnoLLM.generate(transcript, history, emotion, currentMood);
+            responseText = await SunnoLLM.generate(transcript, history, emotion, currentMood, currentLang);
         } else if (!isOnline) {
             // Offline and no local model
             statusEl.textContent = "You're offline. Download the AI model to use Sunno offline.";
@@ -438,6 +460,7 @@ async function callGroqAPI(transcript, history) {
             conversation_history: history,
             session_id: sessionId,
             mood: currentMood,
+            language: currentLang,
         }),
     });
 
@@ -852,6 +875,9 @@ function refreshSettingsUI() {
         llmDownloadRow.classList.remove("hidden");
     }
 
+    // Language
+    refreshLanguageUI();
+
     // Mood
     refreshMoodUI();
 
@@ -868,6 +894,42 @@ function refreshSettingsUI() {
     if (connectionDot) {
         connectionDot.className = `connection-dot ${isOnline ? "online" : "offline"}`;
     }
+}
+
+// ── Language UI ──
+function refreshLanguageUI() {
+    if (!langOptions) return;
+    langOptions.innerHTML = "";
+
+    for (const [key, lang] of Object.entries(LANGUAGES)) {
+        const pill = document.createElement("button");
+        pill.className = "lang-pill" + (key === currentLang ? " active" : "");
+        pill.textContent = lang.label;
+        pill.addEventListener("click", () => {
+            currentLang = key;
+            SunnoStorage.setPreference("language", key);
+            if (langStatus) langStatus.textContent = lang.name;
+
+            // Update STT language
+            if (recognition) {
+                recognition.lang = lang.sttCode;
+            }
+
+            // Auto-select best voice for this language
+            const scored = SunnoCapabilities.getAvailableVoices(key === "auto" ? null : key);
+            if (scored.length > 0) {
+                SunnoTTS.setVoice(scored[0].voice);
+                SunnoStorage.setPreference("selected_voice_key", scored[0].voice.name + "|" + scored[0].voice.lang);
+            }
+
+            refreshLanguageUI();
+            refreshVoiceUI();
+        });
+        langOptions.appendChild(pill);
+    }
+
+    const active = LANGUAGES[currentLang];
+    if (langStatus && active) langStatus.textContent = active.name;
 }
 
 // ── Listener Mood UI ──
@@ -902,9 +964,10 @@ function refreshVoiceUI() {
     if (!voiceList) return;
     voiceList.innerHTML = "";
 
-    const scored = SunnoCapabilities.getAvailableVoices();
+    const langFilter = currentLang === "auto" ? null : currentLang;
+    const scored = SunnoCapabilities.getAvailableVoices(langFilter);
     if (scored.length === 0) {
-        voiceStatus.textContent = "No voices available";
+        voiceStatus.textContent = langFilter ? `No ${LANGUAGES[currentLang]?.name || ""} voices available` : "No voices available";
         return;
     }
 
@@ -914,9 +977,11 @@ function refreshVoiceUI() {
     const bestKey = bestVoice ? voiceKey(bestVoice) : null;
 
     // Group by language
+    const LANG_NAMES = { en: "English", hi: "Hindi", ta: "Tamil", te: "Telugu", bn: "Bengali", mr: "Marathi", kn: "Kannada", gu: "Gujarati" };
     const groups = {};
     for (const { voice } of scored) {
-        const lang = voice.lang.startsWith("hi") ? "Hindi" : "English";
+        const prefix = voice.lang.substring(0, 2);
+        const lang = LANG_NAMES[prefix] || prefix.toUpperCase();
         if (!groups[lang]) groups[lang] = [];
         groups[lang].push(voice);
     }

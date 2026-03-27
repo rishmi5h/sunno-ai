@@ -60,7 +60,8 @@ const SunnoCapabilities = (() => {
         }
 
         // 8. SpeechSynthesis voices (TTS) — always use if available (free, on-device)
-        caps.bestTTSVoice = await selectBestVoice();
+        const langPref = SunnoStorage.getPreference("language", "auto");
+        caps.bestTTSVoice = await selectBestVoice(langPref);
         if (caps.bestTTSVoice) {
             caps.tts = "speech-synthesis";
         }
@@ -103,18 +104,23 @@ const SunnoCapabilities = (() => {
             (v.name.toLowerCase().includes("india") ? 3 : 0);
     }
 
-    function getAvailableVoices() {
+    const SUPPORTED_LANG_PREFIXES = ["en", "hi", "ta", "te", "bn", "mr", "kn", "gu"];
+
+    function getAvailableVoices(langFilter) {
         const voices = speechSynthesis.getVoices();
+        const prefixes = langFilter && langFilter !== "auto"
+            ? [langFilter]
+            : SUPPORTED_LANG_PREFIXES;
         return voices
-            .filter(v => v.lang.startsWith("en") || v.lang.startsWith("hi"))
+            .filter(v => prefixes.some(p => v.lang.startsWith(p)))
             .map(v => ({ voice: v, score: scoreVoice(v) }))
             .sort((a, b) => b.score - a.score);
     }
 
-    function selectBestVoice() {
+    function selectBestVoice(langFilter) {
         return new Promise((resolve) => {
             const trySelect = () => {
-                const scored = getAvailableVoices();
+                const scored = getAvailableVoices(langFilter);
                 return scored.length > 0 ? scored[0].voice : null;
             };
 

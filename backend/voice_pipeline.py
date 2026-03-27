@@ -120,10 +120,16 @@ async def generate_response_streaming(
     return full_text
 
 
+LANGUAGE_NAMES = {
+    "en": "English", "hi": "Hindi", "ta": "Tamil", "te": "Telugu",
+    "bn": "Bengali", "mr": "Marathi", "kn": "Kannada", "gu": "Gujarati",
+}
+
 async def generate_response_groq(
     transcript: str,
     conversation_history: list[dict],
     mood: str = "default",
+    language: str = "auto",
 ) -> str:
     """Generate a listener response using Groq (Llama) as a fast free fallback."""
     if not GROQ_API_KEY:
@@ -135,6 +141,7 @@ async def generate_response_groq(
 
     emotion = detect_emotion(transcript)
     emotion_context = f"[The person seems to be feeling {emotion}.]" if emotion != "neutral" else ""
+    lang_context = f"[Respond in {LANGUAGE_NAMES.get(language, language)}.]" if language != "auto" else ""
 
     from listener_prompt import get_listener_prompt
     system_prompt = get_listener_prompt(mood)
@@ -143,8 +150,9 @@ async def generate_response_groq(
         messages.append({"role": turn["role"], "content": turn["content"]})
 
     user_content = transcript
-    if emotion_context:
-        user_content = f"{emotion_context}\n\n{transcript}"
+    prefix_parts = [p for p in [lang_context, emotion_context] if p]
+    if prefix_parts:
+        user_content = " ".join(prefix_parts) + "\n\n" + transcript
     messages.append({"role": "user", "content": user_content})
 
     t0 = time.monotonic()

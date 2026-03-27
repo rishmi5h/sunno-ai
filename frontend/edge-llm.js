@@ -49,7 +49,9 @@ const SunnoLLM = (() => {
         }
     }
 
-    async function generate(transcript, conversationHistory, emotion, mood) {
+    const LANG_NAMES = { en: "English", hi: "Hindi", ta: "Tamil", te: "Telugu", bn: "Bengali", mr: "Marathi", kn: "Kannada", gu: "Gujarati" };
+
+    async function generate(transcript, conversationHistory, emotion, mood, language) {
         if (!isReady || !engine) {
             throw new Error("WebLLM engine not initialized");
         }
@@ -67,10 +69,17 @@ const SunnoLLM = (() => {
             messages.push({ role: turn.role, content: turn.content });
         }
 
-        // Add current message with emotion context
+        // Add current message with language + emotion context
         let userContent = transcript;
+        const prefixes = [];
+        if (language && language !== "auto" && LANG_NAMES[language]) {
+            prefixes.push(`[Respond in ${LANG_NAMES[language]}.]`);
+        }
         if (emotion && emotion !== "neutral") {
-            userContent = `[The person seems to be feeling ${emotion}.]\n\n${transcript}`;
+            prefixes.push(`[The person seems to be feeling ${emotion}.]`);
+        }
+        if (prefixes.length > 0) {
+            userContent = prefixes.join(" ") + "\n\n" + transcript;
         }
         messages.push({ role: "user", content: userContent });
 

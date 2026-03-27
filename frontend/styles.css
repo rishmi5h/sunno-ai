@@ -580,6 +580,34 @@ html, body {
     50% { opacity: 0.3; }
 }
 
+/* ── Language Selector ── */
+.lang-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.lang-pill {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 0.4rem 0.9rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.lang-pill:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text);
+}
+.lang-pill.active {
+    background: var(--amber);
+    color: var(--bg);
+    border-color: var(--amber);
+}
+
 /* ── Listener Mood ── */
 .mood-options {
     display: flex;
