@@ -875,33 +875,16 @@ function refreshMoodUI() {
     moodOptions.innerHTML = "";
 
     for (const [key, mood] of Object.entries(LISTENER_MOODS)) {
-        const item = document.createElement("div");
-        item.className = "mood-item" + (key === currentMood ? " selected" : "");
-
-        const label = document.createElement("span");
-        label.className = "mood-item-label";
-        label.textContent = mood.label;
-
-        const desc = document.createElement("span");
-        desc.className = "mood-item-desc";
-        desc.textContent = mood.desc;
-
-        const check = document.createElement("span");
-        check.className = "mood-item-check";
-        check.textContent = key === currentMood ? "\u2713" : "";
-
-        item.appendChild(label);
-        item.appendChild(desc);
-        item.appendChild(check);
-
-        item.addEventListener("click", () => {
+        const pill = document.createElement("button");
+        pill.className = "mood-pill" + (key === currentMood ? " active" : "");
+        pill.textContent = mood.label;
+        pill.addEventListener("click", () => {
             currentMood = key;
             SunnoStorage.setPreference("listener_mood", key);
             if (moodStatus) moodStatus.textContent = mood.desc;
             refreshMoodUI();
         });
-
-        moodOptions.appendChild(item);
+        moodOptions.appendChild(pill);
     }
 
     const active = LISTENER_MOODS[currentMood];

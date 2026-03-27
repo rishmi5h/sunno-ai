@@ -583,43 +583,29 @@ html, body {
 /* ── Listener Mood ── */
 .mood-options {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 0.4rem;
 }
-.mood-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.55rem 0.6rem;
-    border-radius: 8px;
+.mood-pill {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 0.4rem 0.9rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
+    color: var(--text-dim);
     cursor: pointer;
-    transition: background 0.15s;
-    border: 1px solid transparent;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
-.mood-item:hover {
-    background: rgba(255, 255, 255, 0.04);
-}
-.mood-item.selected {
-    background: rgba(244, 162, 97, 0.08);
-    border-color: rgba(244, 162, 97, 0.15);
-}
-.mood-item-label {
-    font-size: 0.85rem;
+.mood-pill:hover {
+    border-color: rgba(255, 255, 255, 0.2);
     color: var(--text);
 }
-.mood-item.selected .mood-item-label {
-    color: var(--amber);
-}
-.mood-item-desc {
-    font-size: 0.7rem;
-    color: var(--text-faint);
-    margin-left: 0.5rem;
-}
-.mood-item-check {
-    font-size: 0.8rem;
-    color: var(--amber);
-    width: 1.2rem;
-    text-align: center;
+.mood-pill.active {
+    background: var(--amber);
+    color: var(--bg);
+    border-color: var(--amber);
 }
 
 /* ── Voice List ── */
