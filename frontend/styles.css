@@ -248,6 +248,69 @@ html, body {
     padding: 2rem;
 }
 
+/* ── Onboarding: First Visit Welcome ── */
+.welcome-first {
+    max-width: 320px;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+.welcome-line {
+    font-size: 1.05rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 0.3rem;
+}
+.welcome-sub {
+    font-size: 0.85rem;
+    color: var(--text-faint);
+    line-height: 1.5;
+}
+
+/* ── Onboarding Hints ── */
+.onboarding-hint {
+    position: fixed;
+    z-index: 60;
+    max-width: 260px;
+    padding: 0.75rem 1rem;
+    padding-right: 2rem;
+    background: rgba(20, 18, 26, 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(244, 162, 97, 0.15);
+    border-left: 3px solid var(--amber);
+    border-radius: 12px;
+    animation: hintSlideUp 0.4s ease-out;
+    transition: opacity 0.4s ease-out;
+}
+.onboarding-hint.fading {
+    opacity: 0;
+}
+.hint-text {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin: 0;
+}
+.hint-dismiss {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    color: var(--text-faint);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.2rem;
+    line-height: 1;
+    opacity: 0.5;
+}
+.hint-dismiss:hover {
+    opacity: 1;
+}
+@keyframes hintSlideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
 #orb-container {
     cursor: pointer;
     position: relative;

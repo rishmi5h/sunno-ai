@@ -131,6 +131,7 @@ function setupCanvas() {
 
 // ── Landing → Session (always cloud-first, no setup screen) ──
 startBtn.addEventListener("click", async () => {
+    SunnoOnboarding.onStartTalking();
     landing.classList.remove("active");
 
     // Detect capabilities (respects user preference from localStorage)
@@ -207,6 +208,7 @@ async function startSession() {
     onConnectivityChange();
 
     drawOrb();
+    SunnoOnboarding.onSessionStart();
 }
 
 function updateModeIndicator() {
@@ -269,6 +271,7 @@ function handleServerMessage(msg) {
             break;
         case "done":
             if (!isPlaying) setState("idle");
+            SunnoOnboarding.onConversationComplete();
             break;
         case "error":
             statusEl.textContent = msg.message;
@@ -443,6 +446,8 @@ async function processLocalPipeline(transcript) {
     // Speak the response
     await speakResponse(responseText);
 
+    SunnoOnboarding.onConversationComplete();
+
     // Show download banner after 3 messages if device supports local and model not cached
     if (msgCount >= 3 && !isDownloading) {
         maybeShowDownloadBanner();
@@ -560,6 +565,7 @@ let holdTimer = null;
 let isHolding = false;
 
 orbContainer.addEventListener("pointerdown", (e) => {
+    SunnoOnboarding.onOrbTap();
     if (state === "thinking" || state === "speaking") return;
     e.preventDefault();
 
@@ -1250,3 +1256,6 @@ function drawOrb() {
 
     requestAnimationFrame(drawOrb);
 }
+
+// ── Onboarding init ──
+SunnoOnboarding.initLanding();
