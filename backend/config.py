@@ -18,6 +18,18 @@ ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
+# ONNX model paths (relative to project root)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+MODELS_DIR = os.getenv("MODELS_DIR", os.path.join(_PROJECT_ROOT, "models"))
+VAD_MODEL_PATH = os.getenv("VAD_MODEL_PATH", os.path.join(MODELS_DIR, "silero_vad.onnx"))
+WHISPER_MODEL_PATH = os.getenv("WHISPER_MODEL_PATH", os.path.join(MODELS_DIR, "whisper-small-onnx"))
+EMOTION_MODEL_PATH = os.getenv("EMOTION_MODEL_PATH", os.path.join(MODELS_DIR, "emotion-classifier-onnx"))
+PIPER_MODEL_DIR = os.getenv("PIPER_MODEL_DIR", os.path.join(MODELS_DIR, "piper-hi-IN"))
+
+# Feature flags
+ONNX_ENABLED = os.getenv("ONNX_ENABLED", "true").lower() == "true"
+LOG_LATENCY = os.getenv("LOG_LATENCY", "true").lower() == "true"
+
 # Conversation settings
 MAX_CONVERSATION_TURNS = 10
 SESSION_EXPIRY_HOURS = 24

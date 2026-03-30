@@ -234,3 +234,93 @@ async def process_voice_streaming(
     logger.info(f"Total pipeline: {time.monotonic() - t_start:.2f}s")
 
     return transcript, response_text
+
+
+# ── ONNX Pipeline ──
+
+async def process_voice_onnx(
+    audio_pcm: "np.ndarray",
+    conversation_history: list[dict],
+    send_message: Callable[[dict], Awaitable[None]],
+    mood: str = "default",
+    language: str = "auto",
+) -> tuple[str, str]:
+    """ONNX hybrid pipeline: local STT/Emotion/TTS + cloud LLM.
+    Audio arrives as 16kHz mono float32 PCM (already VAD-segmented by browser).
+    Returns (transcript, response_text).
+    """
+    import numpy as np
+    from models.model_manager import get_pipeline
+    from audio_utils import numpy_to_wav_base64
+
+    pipeline = get_pipeline()
+    if pipeline is None:
+        await send_message({"type": "error", "message": "ONNX models not loaded"})
+        return "", ""
+
+    timings = {}
+    t_start = time.monotonic()
+
+    # Step 1: STT (Whisper ONNX)
+    await send_message({"type": "thinking"})
+    t0 = time.monotonic()
+    transcript = pipeline.stt.transcribe(audio_pcm)
+    timings["stt"] = (time.monotonic() - t0) * 1000
+    logger.info(f"ONNX STT: {timings['stt']:.0f}ms — '{transcript}'")
+
+    if not transcript.strip():
+        return "", ""
+
+    await send_message({"type": "transcript", "text": transcript})
+
+    # Step 2: Safety check (keyword-based, instant)
+    safety_response = check_safety(transcript)
+    if safety_response:
+        await send_message({"type": "response_text", "text": safety_response})
+        # TTS the safety response
+        t0 = time.monotonic()
+        audio, sr = pipeline.tts.synthesize(safety_response)
+        timings["tts"] = (time.monotonic() - t0) * 1000
+        wav_b64 = numpy_to_wav_base64(audio, sr)
+        await send_message({"type": "audio_response", "data": wav_b64, "sample_rate": sr})
+        await send_message({"type": "done"})
+        return transcript, safety_response
+
+    # Step 3: Emotion detection (ONNX)
+    t0 = time.monotonic()
+    emotion_result = pipeline.emotion.detect(transcript)
+    timings["emotion"] = (time.monotonic() - t0) * 1000
+    logger.info(f"ONNX Emotion: {timings['emotion']:.0f}ms — {emotion_result}")
+
+    await send_message({"type": "emotion", "emotion": emotion_result["emotion"]})
+
+    # Step 4: LLM (cloud — only network call)
+    t0 = time.monotonic()
+    response_text = await generate_response_groq(
+        transcript, conversation_history, mood, language
+    )
+    timings["llm"] = (time.monotonic() - t0) * 1000
+    logger.info(f"Cloud LLM: {timings['llm']:.0f}ms — '{response_text}'")
+
+    await send_message({"type": "response_text", "text": response_text})
+
+    # Step 5: TTS (Piper ONNX)
+    t0 = time.monotonic()
+    response_audio, sample_rate = pipeline.tts.synthesize(response_text)
+    timings["tts"] = (time.monotonic() - t0) * 1000
+    logger.info(f"ONNX TTS: {timings['tts']:.0f}ms")
+
+    wav_b64 = numpy_to_wav_base64(response_audio, sample_rate)
+    await send_message({
+        "type": "audio_response",
+        "data": wav_b64,
+        "sample_rate": sample_rate,
+    })
+
+    timings["total"] = (time.monotonic() - t_start) * 1000
+    logger.info(f"ONNX Total: {timings['total']:.0f}ms")
+
+    await send_message({"type": "latency", "timings": timings})
+    await send_message({"type": "done"})
+
+    return transcript, response_text

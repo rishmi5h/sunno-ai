@@ -4,3 +4,7 @@ __pycache__/
 *.db
 .DS_Store
 node_modules/
+models/
+.netlify/
+.claude/
+backend/=*

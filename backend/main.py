@@ -11,7 +11,8 @@ from pydantic import BaseModel
 
 from database import init_db, cleanup_expired, ensure_session, save_message, get_conversation_history
 from emotion_detector import detect_emotion
-from voice_pipeline import process_voice_streaming, generate_response_groq
+from voice_pipeline import process_voice_streaming, process_voice_onnx, generate_response_groq
+from config import ONNX_ENABLED
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,7 +22,18 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     await init_db()
     await cleanup_expired()
+    # Lazy-load ONNX models in background if enabled
+    if ONNX_ENABLED:
+        import asyncio
+        asyncio.create_task(_load_onnx_models())
     yield
+
+
+async def _load_onnx_models():
+    """Load ONNX models in background thread to avoid blocking startup."""
+    import asyncio
+    from models.model_manager import get_pipeline
+    await asyncio.to_thread(get_pipeline)
 
 
 app = FastAPI(title="Sunno", lifespan=lifespan)
@@ -37,7 +49,8 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    from models.model_manager import is_available
+    return {"status": "ok", "onnx": is_available()}
 
 
 # ── REST endpoint for Groq fallback (used by edge frontend) ──
@@ -77,6 +90,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await ensure_session(session_id)
 
     audio_buffer = bytearray()
+    mode = "cloud"  # default; client can switch via init message
 
     async def send_message(msg: dict):
         await websocket.send_json(msg)
@@ -86,6 +100,46 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             raw = await websocket.receive_text()
             msg = json.loads(raw)
 
+            # Mode negotiation
+            if msg["type"] == "init":
+                requested = msg.get("mode", "cloud")
+                if requested == "onnx" and ONNX_ENABLED:
+                    from models.model_manager import is_available
+                    if is_available():
+                        mode = "onnx"
+                    else:
+                        mode = "cloud"
+                else:
+                    mode = "cloud"
+                await websocket.send_json({"type": "init_ack", "mode": mode})
+                logger.info(f"Session {session_id}: mode={mode}")
+                continue
+
+            # ── ONNX mode: single audio_data message per utterance ──
+            if msg["type"] == "audio_data" and mode == "onnx":
+                import numpy as np
+                from audio_utils import pcm_base64_to_numpy
+
+                audio_pcm = pcm_base64_to_numpy(msg["data"])
+                if len(audio_pcm) < 1600:  # less than 100ms
+                    await websocket.send_json({"type": "done"})
+                    continue
+
+                conversation_history = await get_conversation_history(session_id)
+
+                transcript, response_text = await process_voice_onnx(
+                    audio_pcm, conversation_history, send_message,
+                    mood=msg.get("mood", "default"),
+                    language=msg.get("language", "auto"),
+                )
+
+                if transcript:
+                    emotion = detect_emotion(transcript)
+                    await save_message(session_id, "user", transcript, emotion)
+                    await save_message(session_id, "assistant", response_text)
+                continue
+
+            # ── Cloud mode: existing audio_chunk + end_turn protocol ──
             if msg["type"] == "audio_chunk":
                 chunk = base64.b64decode(msg["data"])
                 audio_buffer.extend(chunk)
@@ -102,8 +156,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 conversation_history = await get_conversation_history(session_id)
 
-                # Streaming pipeline — sends transcript, response_text,
-                # and audio_chunks directly via send_message callback
                 transcript, response_text = await process_voice_streaming(
                     audio_bytes, conversation_history, send_message,
                 )
@@ -116,7 +168,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     await websocket.send_json({"type": "done"})
                     continue
 
-                # Persist to DB
                 emotion = detect_emotion(transcript)
                 await save_message(session_id, "user", transcript, emotion)
                 await save_message(session_id, "assistant", response_text)
