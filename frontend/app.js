@@ -14,6 +14,8 @@ let recognition = null; // Web Speech API
 let caps = null; // Device capabilities
 let isDownloading = false;
 let isOnline = navigator.onLine;
+let pipelineMode = "cloud"; // "cloud" | "onnx" — negotiated with server
+let onnxAudioReady = false; // SunnoAudio initialized
 
 // ── DOM ──
 const landing = document.getElementById("landing");
@@ -54,6 +56,10 @@ const LANGUAGES = {
 const langOptions = document.getElementById("lang-options");
 const langStatus = document.getElementById("lang-status");
 let currentLang = "auto";
+
+// ONNX pipeline toggle
+const onnxToggle = document.getElementById("onnx-toggle");
+const onnxStatus = document.getElementById("onnx-status");
 
 // Listener mood
 const moodOptions = document.getElementById("mood-options");
@@ -172,8 +178,9 @@ async function startSession() {
     // Always request mic
     await requestMicPermission();
 
-    // Connect WebSocket only if online and we need cloud STT or TTS
-    if (isOnline && (caps.stt === "cloud" || caps.tts === "cloud")) {
+    // Connect WebSocket — needed for cloud mode AND ONNX mode
+    const wantOnnx = SunnoStorage.getPreference("pipeline_mode", "cloud") === "onnx";
+    if (isOnline && (wantOnnx || caps.stt === "cloud" || caps.tts === "cloud")) {
         connectWebSocket();
     }
 
@@ -213,13 +220,17 @@ async function startSession() {
 
 function updateModeIndicator() {
     if (!modeIndicator) return;
+    if (pipelineMode === "onnx") {
+        modeIndicator.textContent = "ONNX: STT + Emotion + TTS on-server · LLM: Groq";
+        return;
+    }
     const parts = [];
-    if (caps.stt === "web-speech") parts.push("STT: on-device");
+    if (caps && caps.stt === "web-speech") parts.push("STT: on-device");
     else parts.push("STT: cloud");
-    if (caps.llm === "webllm") parts.push("LLM: on-device");
-    else if (caps.llm === "groq") parts.push("LLM: Groq");
+    if (caps && caps.llm === "webllm") parts.push("LLM: on-device");
+    else if (caps && caps.llm === "groq") parts.push("LLM: Groq");
     else parts.push("LLM: cloud");
-    if (caps.tts === "speech-synthesis") parts.push("TTS: on-device");
+    if (caps && caps.tts === "speech-synthesis") parts.push("TTS: on-device");
     else parts.push("TTS: cloud");
     modeIndicator.textContent = parts.join(" · ");
 }
@@ -236,7 +247,12 @@ function connectWebSocket() {
     const url = `${protocol}//${BACKEND_HOST}/ws/${sessionId}`;
     ws = new WebSocket(url);
 
-    ws.onopen = () => console.log("WS connected");
+    ws.onopen = () => {
+        console.log("WS connected");
+        // Request ONNX mode if user has it enabled
+        const wantOnnx = SunnoStorage.getPreference("pipeline_mode", "cloud") === "onnx";
+        ws.send(JSON.stringify({ type: "init", mode: wantOnnx ? "onnx" : "cloud" }));
+    };
     ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         handleServerMessage(msg);
@@ -256,6 +272,12 @@ let isPlaying = false;
 
 function handleServerMessage(msg) {
     switch (msg.type) {
+        case "init_ack":
+            pipelineMode = msg.mode;
+            console.log("Pipeline mode:", pipelineMode);
+            updateModeIndicator();
+            if (pipelineMode === "onnx") initOnnxAudio();
+            break;
         case "transcript":
             showTranscript(msg.text, "user");
             break;
@@ -265,19 +287,87 @@ function handleServerMessage(msg) {
         case "response_text":
             showTranscript(msg.text, "ai");
             break;
+        case "emotion":
+            console.log("Emotion:", msg.emotion);
+            break;
         case "audio_chunk":
             audioQueue.push(base64ToArrayBuffer(msg.data));
             if (!isPlaying) playAudioQueue();
             break;
+        case "audio_response":
+            // ONNX mode: play WAV audio
+            setState("speaking");
+            SunnoAudio.playWavBase64(msg.data).then(() => {
+                setState("idle");
+                SunnoOnboarding.onConversationComplete();
+            }).catch(() => setState("idle"));
+            break;
+        case "latency":
+            if (msg.timings) {
+                console.log("Latency:", msg.timings);
+            }
+            break;
         case "done":
-            if (!isPlaying) setState("idle");
-            SunnoOnboarding.onConversationComplete();
+            // In ONNX mode, done comes after audio_response
+            if (pipelineMode !== "onnx") {
+                if (!isPlaying) setState("idle");
+                SunnoOnboarding.onConversationComplete();
+            }
             break;
         case "error":
             statusEl.textContent = msg.message;
             setTimeout(() => setState("idle"), 2000);
             break;
     }
+}
+
+// ── ONNX Audio Init ──
+async function initOnnxAudio() {
+    if (onnxAudioReady) return;
+    try {
+        const ok = await SunnoAudio.init({
+            onSpeechStart: () => {
+                if (state === "idle") {
+                    setState("recording");
+                    statusEl.textContent = "Listening...";
+                }
+            },
+            onSpeechEnd: () => {
+                // VAD detected end of speech — audio is sent via onAudioReady
+                setState("thinking");
+                statusEl.textContent = "Thinking...";
+            },
+            onVadScore: (score) => {
+                // Could use for orb visualization
+                if (state === "recording") audioLevel = score;
+            },
+            onAudioReady: (pcmFloat32) => {
+                // Send audio to backend ONNX pipeline
+                sendOnnxAudio(pcmFloat32);
+            },
+        });
+        onnxAudioReady = ok;
+        if (ok) console.log("ONNX audio ready (VAD + AudioWorklet)");
+        else console.warn("ONNX audio init failed — falling back to cloud");
+    } catch (err) {
+        console.error("ONNX audio init error:", err);
+        onnxAudioReady = false;
+    }
+}
+
+function sendOnnxAudio(pcmFloat32) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        statusEl.textContent = "Not connected. Try again.";
+        setTimeout(() => setState("idle"), 2000);
+        return;
+    }
+    const b64 = SunnoAudio.float32ToBase64(pcmFloat32);
+    ws.send(JSON.stringify({
+        type: "audio_data",
+        data: b64,
+        mood: currentMood,
+        language: currentLang,
+    }));
 }
 
 function showTranscript(text, who) {
@@ -602,6 +692,16 @@ orbContainer.addEventListener("pointerleave", () => {
 });
 
 function startRecording() {
+    // ONNX mode: use AudioWorklet + VAD (auto-detects speech end)
+    if (pipelineMode === "onnx" && onnxAudioReady) {
+        SunnoAudio.startCapture();
+        isRecording = true;
+        setState("recording");
+        statusEl.textContent = "Speak now...";
+        if (navigator.vibrate) navigator.vibrate(30);
+        return;
+    }
+
     if (caps && caps.stt === "web-speech" && recognition) {
         try {
             recognition.start();
@@ -622,6 +722,14 @@ function startRecording() {
 }
 
 function stopRecording() {
+    // ONNX mode: stop capture (VAD already sent the audio)
+    if (pipelineMode === "onnx" && onnxAudioReady) {
+        SunnoAudio.stopCapture();
+        isRecording = false;
+        if (navigator.vibrate) navigator.vibrate(20);
+        return;
+    }
+
     if (caps && caps.stt === "web-speech" && recognition) {
         try {
             recognition.stop();
@@ -773,6 +881,28 @@ settingsPanel.addEventListener("click", (e) => {
     }
 });
 
+// ── ONNX Pipeline Toggle ──
+onnxToggle.addEventListener("click", () => {
+    const current = onnxToggle.getAttribute("data-state");
+    if (current === "off") {
+        onnxToggle.setAttribute("data-state", "on");
+        SunnoStorage.setPreference("pipeline_mode", "onnx");
+        onnxStatus.textContent = "ONNX mode — reconnect to activate";
+        // Reconnect WebSocket to negotiate ONNX mode
+        if (ws) { ws.close(); }
+        setTimeout(connectWebSocket, 500);
+    } else {
+        onnxToggle.setAttribute("data-state", "off");
+        SunnoStorage.setPreference("pipeline_mode", "cloud");
+        pipelineMode = "cloud";
+        onnxStatus.textContent = "Uses cloud APIs by default";
+        onnxAudioReady = false;
+        if (ws) { ws.close(); }
+        setTimeout(connectWebSocket, 500);
+        updateModeIndicator();
+    }
+});
+
 let toggleBusy = false;
 llmToggle.addEventListener("click", async (e) => {
     e.stopPropagation();
@@ -849,6 +979,17 @@ llmDeleteBtn.addEventListener("click", async () => {
 });
 
 function refreshSettingsUI() {
+    // ONNX toggle
+    const savedPipeline = SunnoStorage.getPreference("pipeline_mode", "cloud");
+    onnxToggle.setAttribute("data-state", savedPipeline === "onnx" ? "on" : "off");
+    if (pipelineMode === "onnx") {
+        onnxStatus.textContent = "Active — ONNX STT + Emotion + TTS";
+    } else if (savedPipeline === "onnx") {
+        onnxStatus.textContent = "Enabled — waiting for server confirmation";
+    } else {
+        onnxStatus.textContent = "Uses cloud APIs by default";
+    }
+
     const local = SunnoCapabilities.canGoLocal();
     const isLocal = caps && caps.llm === "webllm";
     const toggleState = llmToggle.getAttribute("data-state");

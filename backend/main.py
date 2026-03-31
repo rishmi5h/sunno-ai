@@ -184,6 +184,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             pass
 
 
+# Serve ONNX model files (for browser-side VAD)
+models_path = Path(__file__).resolve().parent.parent / "models"
+if models_path.is_dir():
+    app.mount("/models", StaticFiles(directory=str(models_path)), name="models")
+
 # Serve frontend — only if directory exists (frontend is on Netlify in production)
 frontend_path = Path(__file__).resolve().parent.parent / "frontend"
 if frontend_path.is_dir():
