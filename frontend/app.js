@@ -683,11 +683,18 @@ orbContainer.addEventListener("pointerup", (e) => {
     }
 });
 
-orbContainer.addEventListener("pointerleave", () => {
+orbContainer.addEventListener("pointerleave", (e) => {
+    // Only act on pointerleave for hold-to-talk mode, and only if pointer
+    // actually left (Firefox fires this aggressively on minor movements)
     clearTimeout(holdTimer);
-    if (isHolding && isRecording) {
-        stopRecording();
-        isHolding = false;
+    if (isHolding && isRecording && e.pointerType !== "touch") {
+        // Small delay to avoid false triggers in Firefox
+        setTimeout(() => {
+            if (isHolding && isRecording) {
+                stopRecording();
+                isHolding = false;
+            }
+        }, 100);
     }
 });
 

@@ -26,54 +26,58 @@ const SunnoTTS = (() => {
             // Cancel any ongoing speech
             speechSynthesis.cancel();
 
-            const utterance = new SpeechSynthesisUtterance(text);
+            // Firefox needs a small delay after cancel before speaking
+            const doSpeak = () => {
+                const utterance = new SpeechSynthesisUtterance(text);
 
-            if (selectedVoice) {
-                utterance.voice = selectedVoice;
-            }
-
-            utterance.rate = currentMoodParams.rate;
-            utterance.pitch = currentMoodParams.pitch;
-            utterance.volume = currentMoodParams.volume;
-
-            utterance.onstart = () => {
-                if (onStart) onStart();
-            };
-
-            utterance.onend = () => {
-                if (onEnd) onEnd();
-                resolve();
-            };
-
-            utterance.onerror = (event) => {
-                if (onError) onError(event);
-                reject(event);
-            };
-
-            speechSynthesis.speak(utterance);
-
-            // Workaround: Chrome sometimes pauses long utterances
-            // Resume periodically to prevent stalling
-            const resumeInterval = setInterval(() => {
-                if (!speechSynthesis.speaking) {
-                    clearInterval(resumeInterval);
-                    return;
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
                 }
-                speechSynthesis.pause();
-                speechSynthesis.resume();
-            }, 10000);
 
-            utterance.onend = () => {
-                clearInterval(resumeInterval);
-                if (onEnd) onEnd();
-                resolve();
+                utterance.rate = currentMoodParams.rate;
+                utterance.pitch = currentMoodParams.pitch;
+                utterance.volume = currentMoodParams.volume;
+
+                // Chrome pause/resume workaround (skip for Firefox)
+                const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg/.test(navigator.userAgent);
+                let resumeInterval = null;
+
+                utterance.onstart = () => {
+                    if (onStart) onStart();
+                    if (isChrome) {
+                        resumeInterval = setInterval(() => {
+                            if (!speechSynthesis.speaking) {
+                                clearInterval(resumeInterval);
+                                return;
+                            }
+                            speechSynthesis.pause();
+                            speechSynthesis.resume();
+                        }, 10000);
+                    }
+                };
+
+                utterance.onend = () => {
+                    if (resumeInterval) clearInterval(resumeInterval);
+                    if (onEnd) onEnd();
+                    resolve();
+                };
+
+                utterance.onerror = (event) => {
+                    if (resumeInterval) clearInterval(resumeInterval);
+                    // Firefox fires "interrupted" error on cancel — ignore it
+                    if (event.error === "interrupted" || event.error === "canceled") {
+                        resolve();
+                        return;
+                    }
+                    if (onError) onError(event);
+                    reject(event);
+                };
+
+                speechSynthesis.speak(utterance);
             };
 
-            utterance.onerror = (event) => {
-                clearInterval(resumeInterval);
-                if (onError) onError(event);
-                reject(event);
-            };
+            // Firefox needs ~50ms after cancel before new speak()
+            setTimeout(doSpeak, 50);
         });
     }
 

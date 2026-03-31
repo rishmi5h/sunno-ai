@@ -105,9 +105,25 @@ const SunnoCapabilities = (() => {
     }
 
     const SUPPORTED_LANG_PREFIXES = ["en", "hi", "ta", "te", "bn", "mr", "kn", "gu"];
+    let _cachedVoices = [];
+
+    // Firefox returns empty from getVoices() until onvoiceschanged fires.
+    // Cache voices once loaded so UI refreshes don't lose them.
+    function ensureVoicesLoaded() {
+        const fresh = speechSynthesis.getVoices();
+        if (fresh.length > 0) _cachedVoices = fresh;
+        return _cachedVoices;
+    }
+
+    // Listen for voice list changes (Firefox fires this async)
+    if (typeof speechSynthesis !== "undefined" && speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.addEventListener("voiceschanged", () => {
+            _cachedVoices = speechSynthesis.getVoices();
+        });
+    }
 
     function getAvailableVoices(langFilter) {
-        const voices = speechSynthesis.getVoices();
+        const voices = ensureVoicesLoaded();
         const prefixes = langFilter && langFilter !== "auto"
             ? [langFilter]
             : SUPPORTED_LANG_PREFIXES;
