@@ -35,9 +35,24 @@ def download_file(url: str, dest: Path, name: str):
 
 
 def download_silero_vad():
-    print("\n1. Silero VAD v5")
-    url = "https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx"
-    download_file(url, MODELS_DIR / "silero_vad.onnx", "Silero VAD")
+    print("\n1. Silero VAD")
+    vad_path = MODELS_DIR / "silero_vad.onnx"
+    if vad_path.exists():
+        print(f"  [OK] Silero VAD already exists ({vad_path.stat().st_size / 1e6:.1f}MB)")
+        return
+    # Try HuggingFace mirror first, then GitHub
+    urls = [
+        "https://huggingface.co/deepghs/silero-vad-onnx/resolve/main/silero_vad.onnx",
+        "https://github.com/snakers4/silero-vad/raw/v5.1.2/files/silero_vad.onnx",
+        "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx",
+    ]
+    for url in urls:
+        try:
+            download_file(url, vad_path, "Silero VAD")
+            return
+        except Exception as e:
+            print(f"  [WARN] {url} failed: {e}")
+    print("  [ERR] Could not download Silero VAD from any source")
 
 
 def download_whisper():
@@ -95,16 +110,16 @@ def download_piper_tts():
     model_path = piper_dir / "model.onnx"
     config_path = piper_dir / "model.onnx.json"
 
-    # hi_IN-swara-medium voice
-    base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/swara/medium"
+    # hi_IN-pratham-medium voice
+    base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/pratham/medium"
 
     if not model_path.exists():
-        download_file(f"{base_url}/hi_IN-swara-medium.onnx", model_path, "Piper Hindi model")
+        download_file(f"{base_url}/hi_IN-pratham-medium.onnx", model_path, "Piper Hindi model")
     else:
         print(f"  [OK] Piper model already exists ({model_path.stat().st_size / 1e6:.1f}MB)")
 
     if not config_path.exists():
-        download_file(f"{base_url}/hi_IN-swara-medium.onnx.json", config_path, "Piper Hindi config")
+        download_file(f"{base_url}/hi_IN-pratham-medium.onnx.json", config_path, "Piper Hindi config")
     else:
         print("  [OK] Piper config already exists")
 

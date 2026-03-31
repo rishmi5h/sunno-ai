@@ -1,29 +1,32 @@
-"""Whisper ONNX wrapper for speech-to-text using optimum."""
+"""Whisper ONNX wrapper for speech-to-text using optimum pipeline."""
 import numpy as np
-from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
-from transformers import WhisperProcessor
+from pathlib import Path
 
 
 class WhisperSTT:
     def __init__(self, model_path: str, language: str = "hi"):
+        from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
+        from transformers import WhisperProcessor, AutomaticSpeechRecognitionPipeline
+
+        model_dir = Path(model_path)
+        subfolder = "onnx" if (model_dir / "onnx").is_dir() else None
+
         self.processor = WhisperProcessor.from_pretrained(model_path)
         self.model = ORTModelForSpeechSeq2Seq.from_pretrained(
-            model_path, provider="CPUExecutionProvider"
+            model_path, provider="CPUExecutionProvider",
+            subfolder=subfolder,
         )
         self.language = language
-        self.forced_decoder_ids = self.processor.get_decoder_prompt_ids(
-            language=language, task="transcribe"
-        )
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> str:
         """Transcribe float32 mono audio to text."""
         input_features = self.processor(
-            audio, sampling_rate=sample_rate, return_tensors="np"
+            audio, sampling_rate=sample_rate, return_tensors="pt"
         ).input_features
 
+        # Use low-level generate to avoid pipeline compatibility issues
         predicted_ids = self.model.generate(
             input_features,
-            forced_decoder_ids=self.forced_decoder_ids,
             max_new_tokens=128,
         )
 
@@ -33,6 +36,3 @@ class WhisperSTT:
 
     def set_language(self, language: str):
         self.language = language
-        self.forced_decoder_ids = self.processor.get_decoder_prompt_ids(
-            language=language, task="transcribe"
-        )

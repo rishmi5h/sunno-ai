@@ -1,5 +1,6 @@
 """Piper TTS wrapper using ONNX Runtime."""
 import json
+import subprocess
 import numpy as np
 import onnxruntime as ort
 from pathlib import Path
@@ -21,21 +22,30 @@ class PiperTTS:
         self.espeak_voice = self.config.get("espeak", {}).get("voice", "hi")
 
     def _text_to_phoneme_ids(self, text: str) -> list[int]:
-        from piper_phonemize import phonemize_espeak
+        """Convert text to phoneme IDs using espeak-ng subprocess."""
+        result = subprocess.run(
+            ["espeak-ng", "-v", self.espeak_voice, "--ipa", "-q", text],
+            capture_output=True, text=True, timeout=5,
+        )
+        phonemes = result.stdout.strip()
 
-        phonemes_list = phonemize_espeak(text, self.espeak_voice)
         ids = [0]  # BOS
-        for sentence_phonemes in phonemes_list:
-            for char in sentence_phonemes:
-                if char in self.phoneme_to_id:
-                    ids.append(self.phoneme_to_id[char])
-                    ids.append(0)  # pad
+        for char in phonemes:
+            if char in self.phoneme_to_id:
+                val = self.phoneme_to_id[char]
+                # Config may store IDs as [int] or int
+                pid = val[0] if isinstance(val, list) else val
+                ids.append(pid)
+                ids.append(0)  # pad
         ids.append(0)  # EOS
         return ids
 
     def synthesize(self, text: str, speed: float = 1.0) -> tuple[np.ndarray, int]:
         """Synthesize speech. Returns (float32 audio, sample_rate)."""
         phoneme_ids = self._text_to_phoneme_ids(text)
+
+        if len(phoneme_ids) <= 2:  # only BOS+EOS
+            return np.zeros(self.sample_rate, dtype=np.float32), self.sample_rate
 
         audio = self.session.run(
             None,

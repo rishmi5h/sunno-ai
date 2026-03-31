@@ -84,7 +84,7 @@ def get_pipeline(models_dir: str = None) -> ONNXPipeline | None:
     models = Path(models_dir)
     required = [
         models / "silero_vad.onnx",
-        models / "whisper-small-onnx" / "encoder_model.onnx",
+        models / "whisper-small-onnx" / "onnx" / "encoder_model.onnx",
         models / "emotion-classifier-onnx" / "model.onnx",
         models / "piper-hi-IN" / "model.onnx",
     ]
