@@ -276,7 +276,14 @@ function handleServerMessage(msg) {
             pipelineMode = msg.mode;
             console.log("Pipeline mode:", pipelineMode);
             updateModeIndicator();
-            if (pipelineMode === "onnx") initOnnxAudio();
+            if (pipelineMode === "onnx") {
+                initOnnxAudio();
+                if (onnxStatus) onnxStatus.textContent = "On-device STT + TTS active";
+                if (onnxToggle) onnxToggle.setAttribute("data-state", "on");
+            } else {
+                if (onnxStatus) onnxStatus.textContent = "Uses cloud APIs";
+                if (onnxToggle) onnxToggle.setAttribute("data-state", "off");
+            }
             break;
         case "transcript":
             showTranscript(msg.text, "user");
@@ -894,18 +901,29 @@ onnxToggle.addEventListener("click", () => {
     if (current === "off") {
         onnxToggle.setAttribute("data-state", "on");
         SunnoStorage.setPreference("pipeline_mode", "onnx");
-        onnxStatus.textContent = "ONNX mode — reconnect to activate";
-        // Reconnect WebSocket to negotiate ONNX mode
+        onnxStatus.textContent = "Switching to ONNX...";
+        // Auto-reconnect WebSocket to negotiate ONNX mode
         if (ws) { ws.close(); }
-        setTimeout(connectWebSocket, 500);
+        setTimeout(() => {
+            connectWebSocket();
+            // Update status once connected
+            setTimeout(() => {
+                if (pipelineMode === "onnx") {
+                    onnxStatus.textContent = "On-device STT + TTS active";
+                } else {
+                    onnxStatus.textContent = "ONNX not available on server";
+                    onnxToggle.setAttribute("data-state", "off");
+                }
+            }, 2000);
+        }, 300);
     } else {
         onnxToggle.setAttribute("data-state", "off");
         SunnoStorage.setPreference("pipeline_mode", "cloud");
         pipelineMode = "cloud";
-        onnxStatus.textContent = "Uses cloud APIs by default";
+        onnxStatus.textContent = "Uses cloud APIs";
         onnxAudioReady = false;
         if (ws) { ws.close(); }
-        setTimeout(connectWebSocket, 500);
+        setTimeout(connectWebSocket, 300);
         updateModeIndicator();
     }
 });
