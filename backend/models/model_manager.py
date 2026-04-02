@@ -62,20 +62,25 @@ class ONNXPipeline:
         try:
             self.tts.synthesize("hello")
         except Exception as e:
-            logger.warning(f"TTS warmup failed (espeak-ng may not be installed): {e}")
+            logger.error(f"TTS warmup FAILED — TTS will not work: {e}")
+            self.tts = None
 
         logger.info(f"Warmup done in {time.time() - t0:.1f}s")
 
 
+import threading
+_lock = threading.Lock()
+
+
 def get_pipeline(models_dir: str = None) -> ONNXPipeline | None:
-    """Get or create the singleton ONNX pipeline."""
+    """Get or create the singleton ONNX pipeline. Thread-safe."""
     global _pipeline, _loading
 
     if _pipeline is not None:
         return _pipeline
 
-    if _loading:
-        return None
+    if not _lock.acquire(blocking=False):
+        return None  # another thread is loading
 
     if models_dir is None:
         models_dir = str(Path(__file__).parent.parent.parent / "models")
@@ -97,14 +102,13 @@ def get_pipeline(models_dir: str = None) -> ONNXPipeline | None:
         )
         return None
 
-    _loading = True
     try:
         _pipeline = ONNXPipeline(models_dir)
     except Exception as e:
         logger.error(f"Failed to load ONNX models: {e}")
         _pipeline = None
     finally:
-        _loading = False
+        _lock.release()
 
     return _pipeline
 

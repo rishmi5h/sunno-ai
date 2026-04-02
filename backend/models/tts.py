@@ -36,8 +36,9 @@ class PiperTTS:
     def _text_to_phoneme_ids(self, text: str) -> list[int]:
         """Convert text to phoneme IDs using espeak-ng subprocess."""
         espeak = self._find_espeak()
+        # Use "--" to prevent text from being interpreted as flags
         result = subprocess.run(
-            [espeak, "-v", self.espeak_voice, "--ipa", "-q", text],
+            [espeak, "-v", self.espeak_voice, "--ipa", "-q", "--", text],
             capture_output=True, text=True, timeout=5,
         )
         phonemes = result.stdout.strip()

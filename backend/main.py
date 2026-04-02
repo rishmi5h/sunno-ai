@@ -25,7 +25,11 @@ async def lifespan(app: FastAPI):
     # Lazy-load ONNX models in background if enabled
     if ONNX_ENABLED:
         import asyncio
-        asyncio.create_task(_load_onnx_models())
+        task = asyncio.create_task(_load_onnx_models())
+        task.add_done_callback(
+            lambda t: logger.error(f"ONNX load failed: {t.exception()}")
+            if t.exception() else None
+        )
     yield
 
 
@@ -41,7 +45,7 @@ app = FastAPI(title="Sunno", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -83,14 +87,26 @@ async def chat_endpoint(req: ChatRequest):
     return ChatResponse(response_text=response_text, emotion=emotion)
 
 
+import re
+_VALID_SESSION_ID = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+MAX_AUDIO_BYTES = 10 * 1024 * 1024  # 10MB (~5 minutes of 16kHz float32)
+MAX_AUDIO_B64 = MAX_AUDIO_BYTES * 4 // 3  # base64 overhead
+
+
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
+    # Validate session ID
+    if not _VALID_SESSION_ID.match(session_id):
+        await websocket.close(code=1008, reason="Invalid session ID")
+        return
+
     await websocket.accept()
     logger.info(f"WebSocket connected: {session_id}")
     await ensure_session(session_id)
 
     audio_buffer = bytearray()
-    mode = "cloud"  # default; client can switch via init message
+    mode = "cloud"
+    processing = False  # prevent concurrent processing
 
     async def send_message(msg: dict):
         await websocket.send_json(msg)
@@ -98,7 +114,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     try:
         while True:
             raw = await websocket.receive_text()
-            msg = json.loads(raw)
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json({"type": "error", "message": "Invalid JSON"})
+                continue
+
+            if "type" not in msg:
+                await websocket.send_json({"type": "error", "message": "Missing message type"})
+                continue
 
             # Mode negotiation
             if msg["type"] == "init":
@@ -117,31 +141,46 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
             # ── ONNX mode: single audio_data message per utterance ──
             if msg["type"] == "audio_data" and mode == "onnx":
+                if processing:
+                    await websocket.send_json({"type": "error", "message": "Still processing"})
+                    continue
+
+                data = msg.get("data", "")
+                if len(data) > MAX_AUDIO_B64:
+                    await websocket.send_json({"type": "error", "message": "Audio too large"})
+                    continue
+
                 import numpy as np
                 from audio_utils import pcm_base64_to_numpy
 
-                audio_pcm = pcm_base64_to_numpy(msg["data"])
+                audio_pcm = pcm_base64_to_numpy(data)
                 if len(audio_pcm) < 1600:  # less than 100ms
                     await websocket.send_json({"type": "done"})
                     continue
 
-                conversation_history = await get_conversation_history(session_id)
-
-                transcript, response_text = await process_voice_onnx(
-                    audio_pcm, conversation_history, send_message,
-                    mood=msg.get("mood", "default"),
-                    language=msg.get("language", "auto"),
-                )
-
-                if transcript:
-                    emotion = detect_emotion(transcript)
-                    await save_message(session_id, "user", transcript, emotion)
-                    await save_message(session_id, "assistant", response_text)
+                processing = True
+                try:
+                    conversation_history = await get_conversation_history(session_id)
+                    transcript, response_text = await process_voice_onnx(
+                        audio_pcm, conversation_history, send_message,
+                        mood=msg.get("mood", "default"),
+                        language=msg.get("language", "auto"),
+                    )
+                    if transcript:
+                        emotion = detect_emotion(transcript)
+                        await save_message(session_id, "user", transcript, emotion)
+                        await save_message(session_id, "assistant", response_text)
+                finally:
+                    processing = False
                 continue
 
             # ── Cloud mode: existing audio_chunk + end_turn protocol ──
             if msg["type"] == "audio_chunk":
-                chunk = base64.b64decode(msg["data"])
+                chunk = base64.b64decode(msg.get("data", ""))
+                if len(audio_buffer) + len(chunk) > MAX_AUDIO_BYTES:
+                    await websocket.send_json({"type": "error", "message": "Audio buffer exceeded"})
+                    audio_buffer.clear()
+                    continue
                 audio_buffer.extend(chunk)
 
             elif msg["type"] == "end_turn":
@@ -177,17 +216,22 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected: {session_id}")
     except Exception as e:
-        logger.error(f"WebSocket error: {e}", exc_info=True)
+        logger.error(f"WebSocket error for {session_id}: {e}", exc_info=True)
         try:
-            await websocket.send_json({"type": "error", "message": str(e)})
-        except Exception:
-            pass
+            await websocket.send_json({"type": "error", "message": "Internal server error"})
+        except Exception as send_err:
+            logger.warning(f"Failed to send error to {session_id}: {send_err}")
 
 
-# Serve ONNX model files (for browser-side VAD)
-models_path = Path(__file__).resolve().parent.parent / "models"
-if models_path.is_dir():
-    app.mount("/models", StaticFiles(directory=str(models_path)), name="models")
+# Serve only VAD model for browser-side use (not the full models directory)
+from fastapi.responses import FileResponse
+
+@app.get("/models/silero_vad.onnx")
+async def serve_vad_model():
+    vad_path = Path(__file__).resolve().parent.parent / "models" / "silero_vad.onnx"
+    if vad_path.exists():
+        return FileResponse(str(vad_path), media_type="application/octet-stream")
+    return {"error": "VAD model not found"}
 
 # Serve frontend — only if directory exists (frontend is on Netlify in production)
 frontend_path = Path(__file__).resolve().parent.parent / "frontend"

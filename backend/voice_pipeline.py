@@ -320,7 +320,9 @@ async def process_voice_onnx(
     timings["total"] = (time.monotonic() - t_start) * 1000
     logger.info(f"ONNX Total: {timings['total']:.0f}ms")
 
-    await send_message({"type": "latency", "timings": timings})
+    from config import LOG_LATENCY
+    if LOG_LATENCY:
+        await send_message({"type": "latency", "timings": timings})
     await send_message({"type": "done"})
 
     return transcript, response_text

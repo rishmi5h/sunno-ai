@@ -8,7 +8,12 @@ import numpy as np
 def pcm_base64_to_numpy(b64_data: str) -> np.ndarray:
     """Convert base64-encoded PCM float32 audio to numpy array."""
     raw = base64.b64decode(b64_data)
-    return np.frombuffer(raw, dtype=np.float32)
+    if len(raw) % 4 != 0:
+        raise ValueError(f"PCM data length {len(raw)} not aligned to float32")
+    arr = np.frombuffer(raw, dtype=np.float32)
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("PCM data contains NaN or Inf values")
+    return arr
 
 
 def numpy_to_wav_base64(audio: np.ndarray, sample_rate: int) -> str:
