@@ -21,10 +21,23 @@ class PiperTTS:
         self.phoneme_to_id = self.config.get("phoneme_id_map", {})
         self.espeak_voice = self.config.get("espeak", {}).get("voice", "hi")
 
+    def _find_espeak(self):
+        """Find espeak-ng binary."""
+        import shutil
+        path = shutil.which("espeak-ng")
+        if path:
+            return path
+        # Common install locations
+        for p in ["/opt/homebrew/bin/espeak-ng", "/usr/bin/espeak-ng", "/usr/local/bin/espeak-ng"]:
+            if Path(p).exists():
+                return p
+        raise FileNotFoundError("espeak-ng not found. Install: brew install espeak-ng")
+
     def _text_to_phoneme_ids(self, text: str) -> list[int]:
         """Convert text to phoneme IDs using espeak-ng subprocess."""
+        espeak = self._find_espeak()
         result = subprocess.run(
-            ["espeak-ng", "-v", self.espeak_voice, "--ipa", "-q", text],
+            [espeak, "-v", self.espeak_voice, "--ipa", "-q", text],
             capture_output=True, text=True, timeout=5,
         )
         phonemes = result.stdout.strip()
