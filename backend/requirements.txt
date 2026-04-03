@@ -8,3 +8,11 @@ groq>=0.13
 aiosqlite>=0.20
 python-dotenv>=1.0
 textblob>=0.18
+
+# ONNX pipeline
+onnxruntime>=1.17.0
+optimum[onnxruntime]>=1.16.0
+transformers>=4.36.0
+huggingface-hub>=0.20.0
+scipy>=1.12.0
+numpy>=1.24.0

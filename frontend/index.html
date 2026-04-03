@@ -123,6 +123,20 @@
         </div>
 
         <div class="settings-body">
+            <!-- ONNX Pipeline toggle -->
+            <div class="settings-section">
+                <h3>Voice Pipeline</h3>
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <span class="label-text">ONNX Pipeline</span>
+                        <span id="onnx-status" class="label-sub">Uses cloud APIs by default</span>
+                    </div>
+                    <button id="onnx-toggle" class="toggle-btn" data-state="off">
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    </button>
+                </div>
+            </div>
+
             <!-- LLM toggle -->
             <div class="settings-section">
                 <h3>AI Model</h3>
@@ -251,6 +265,7 @@
     <script src="edge-llm.js"></script>
     <script src="edge-tts.js"></script>
     <script src="ambient.js"></script>
+    <script src="audio-utils.js"></script>
     <script src="onboarding.js"></script>
 
     <!-- Main app -->
