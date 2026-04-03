@@ -38,9 +38,11 @@ const SunnoTTS = (() => {
                 utterance.pitch = currentMoodParams.pitch;
                 utterance.volume = currentMoodParams.volume;
 
-                // Pause/resume workaround for Chrome AND iOS Safari
-                // Chrome pauses long utterances; iOS stops after ~15 seconds
-                const isFirefox = /Firefox/.test(navigator.userAgent);
+                // Pause/resume keeps speech alive on Chrome (pauses long utterances)
+                // and iOS Safari (stops after ~15s). Skip on Firefox where it causes
+                // double-fire issues. Safe on all other Chromium-based browsers
+                // (Brave, Edge, Opera, Samsung Internet) since they share the same bug.
+                const isFirefox = /Firefox\//.test(navigator.userAgent);
                 let resumeInterval = null;
 
                 utterance.onstart = () => {
@@ -77,7 +79,8 @@ const SunnoTTS = (() => {
                 speechSynthesis.speak(utterance);
             };
 
-            // Firefox needs ~50ms after cancel before new speak()
+            // Non-Chromium browsers (Firefox, Samsung Internet) need delay after cancel.
+            // The delay is harmless on Chromium (50ms), so apply it universally for safety.
             setTimeout(doSpeak, 50);
         });
     }

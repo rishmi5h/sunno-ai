@@ -1037,7 +1037,7 @@ function refreshSettingsUI() {
 
     // LLM Status text
     if (!local.llm) {
-        llmStatus.textContent = "Not available on this device — needs WebGPU (try Chrome on desktop)";
+        llmStatus.textContent = "Not available on this device — needs WebGPU";
         llmStatus.style.color = "#e07a5f";
         llmToggle.style.opacity = "0.3";
         llmToggle.style.pointerEvents = "none";
