@@ -25,9 +25,13 @@ const SunnoAudio = (() => {
         onAudioReady = callbacks.onAudioReady || null;
 
         // Create AudioContext
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-            sampleRate: 48000, // will resample in worklet
-        });
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Check AudioWorklet support (iOS Safari < 14.5 doesn't have it)
+        if (!audioCtx.audioWorklet) {
+            console.warn("AudioWorklet not supported — ONNX audio unavailable");
+            return false;
+        }
 
         // Load AudioWorklet
         await audioCtx.audioWorklet.addModule("audio-worklet-processor.js");
@@ -92,7 +96,7 @@ const SunnoAudio = (() => {
         if (isCapturing) return;
 
         stream = await navigator.mediaDevices.getUserMedia({
-            audio: { channelCount: 1, sampleRate: 48000 },
+            audio: { channelCount: 1 }, // Don't enforce sampleRate — iOS Safari doesn't support it
         });
 
         const source = audioCtx.createMediaStreamSource(stream);

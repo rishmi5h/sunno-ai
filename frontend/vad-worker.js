@@ -20,7 +20,10 @@ importScripts("https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.wasm
 let session = null;
 let h = null;
 let c = null;
-const SR = new BigInt64Array([16000n]);
+// Use regular Int32 tensor — Silero VAD accepts both int64 and int32 for sample rate
+const SR = typeof BigInt64Array !== "undefined"
+    ? new BigInt64Array([BigInt(16000)])
+    : new Int32Array([16000]);
 const THRESHOLD = 0.5;
 const SPEECH_PAD_MS = 300; // ms of silence before declaring speech_end
 const MIN_SPEECH_MS = 250; // minimum speech duration to trigger

@@ -6,7 +6,8 @@ let ws = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
-let sessionId = crypto.randomUUID();
+let sessionId = (crypto.randomUUID ? crypto.randomUUID() :
+    "xxxx-xxxx-xxxx".replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
 let state = "idle"; // idle | recording | thinking | speaking
 let analyser = null;
 let audioDataArray = null;
@@ -239,6 +240,9 @@ function updateModeIndicator() {
 const BACKEND_HOST = window.BACKEND_URL || location.host;
 
 // ── WebSocket (cloud fallback path) ──
+let wsReconnectDelay = 1000;
+const WS_MAX_DELAY = 30000;
+
 function connectWebSocket() {
     if (!isOnline) return;
 
@@ -249,7 +253,7 @@ function connectWebSocket() {
 
     ws.onopen = () => {
         console.log("WS connected");
-        // Request ONNX mode if user has it enabled
+        wsReconnectDelay = 1000; // reset backoff on successful connect
         const wantOnnx = SunnoStorage.getPreference("pipeline_mode", "cloud") === "onnx";
         ws.send(JSON.stringify({ type: "init", mode: wantOnnx ? "onnx" : "cloud" }));
     };
@@ -259,12 +263,21 @@ function connectWebSocket() {
     };
     ws.onclose = () => {
         console.log("WS disconnected");
-        if (isOnline) {
-            setTimeout(connectWebSocket, 2000);
+        if (isOnline && document.visibilityState !== "hidden") {
+            setTimeout(connectWebSocket, wsReconnectDelay);
+            wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, WS_MAX_DELAY);
         }
     };
     ws.onerror = (err) => console.error("WS error:", err);
 }
+
+// Reconnect when app comes back to foreground
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && (!ws || ws.readyState !== WebSocket.OPEN)) {
+        wsReconnectDelay = 1000;
+        connectWebSocket();
+    }
+});
 
 // ── Cloud fallback audio playback ──
 let audioQueue = [];
@@ -419,7 +432,11 @@ async function playAudioQueue() {
         setState("idle");
     };
 
-    await audio.play().catch(() => {
+    await audio.play().catch((err) => {
+        console.warn("Audio play failed:", err.name);
+        if (err.name === "NotAllowedError") {
+            statusEl.textContent = "Tap to hear response";
+        }
         isPlaying = false;
         setState("idle");
     });
@@ -623,11 +640,10 @@ function getAudioLevel() {
 }
 
 function setupRecorder(stream) {
-    mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-            ? "audio/webm;codecs=opus"
-            : "audio/webm",
-    });
+    // Pick best supported codec — iOS Safari needs mp4, Chrome/Firefox use webm
+    const codecs = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+    const mimeType = codecs.find(c => MediaRecorder.isTypeSupported(c)) || "";
+    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
 
     mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunks.push(e.data);

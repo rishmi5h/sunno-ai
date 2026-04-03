@@ -38,13 +38,14 @@ const SunnoTTS = (() => {
                 utterance.pitch = currentMoodParams.pitch;
                 utterance.volume = currentMoodParams.volume;
 
-                // Chrome pause/resume workaround (skip for Firefox)
-                const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg/.test(navigator.userAgent);
+                // Pause/resume workaround for Chrome AND iOS Safari
+                // Chrome pauses long utterances; iOS stops after ~15 seconds
+                const isFirefox = /Firefox/.test(navigator.userAgent);
                 let resumeInterval = null;
 
                 utterance.onstart = () => {
                     if (onStart) onStart();
-                    if (isChrome) {
+                    if (!isFirefox) {
                         resumeInterval = setInterval(() => {
                             if (!speechSynthesis.speaking) {
                                 clearInterval(resumeInterval);
