@@ -1267,7 +1267,7 @@ const particles = [];
 for (let i = 0; i < 20; i++) {
     particles.push({
         angle: Math.random() * Math.PI * 2,
-        dist: 100 + Math.random() * 50,
+        dist: 80 + Math.random() * 40,
         speed: 0.2 + Math.random() * 0.3,
         size: 1 + Math.random() * 2,
         alpha: 0.1 + Math.random() * 0.2,
@@ -1281,7 +1281,7 @@ function drawOrb() {
     const h = rect.height;
     const cx = w / 2;
     const cy = h / 2;
-    const baseRadius = 80;
+    const baseRadius = Math.min(w, h) * 0.27; // scale to canvas size
 
     orbTime += 0.016;
     ctx.clearRect(0, 0, w, h);
@@ -1306,14 +1306,16 @@ function drawOrb() {
     smoothGlow += (targetGlow - smoothGlow) * 0.1;
     const radius = smoothRadius;
 
-    // Outer glow
-    const glowRadius = radius + 60;
+    // Outer glow (use arc instead of fillRect to avoid canvas edge artifacts)
+    const glowRadius = radius + Math.min(60, Math.min(w, h) * 0.2);
     const gradient = ctx.createRadialGradient(cx, cy, radius * 0.5, cx, cy, glowRadius);
     gradient.addColorStop(0, `rgba(244, 162, 97, ${smoothGlow})`);
     gradient.addColorStop(0.5, `rgba(244, 140, 80, ${smoothGlow * 0.3})`);
     gradient.addColorStop(1, "rgba(244, 162, 97, 0)");
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, w, h);
+    ctx.beginPath();
+    ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
 
     // Ambient particles
     for (const p of particles) {
