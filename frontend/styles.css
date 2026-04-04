@@ -393,6 +393,87 @@ html, body {
     background: rgba(255, 255, 255, 0.05);
 }
 
+/* ── End Session Button ── */
+.end-session-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 100px;
+    padding: 0.4rem 1.2rem;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    margin-top: 0.5rem;
+}
+.end-session-btn:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-dim);
+}
+
+/* ── Session Recap Overlay ── */
+.recap-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 8, 14, 0.85);
+    backdrop-filter: blur(16px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 70;
+    animation: fadeIn 0.4s ease-out;
+}
+.recap-overlay.hidden {
+    display: none;
+}
+.recap-card {
+    text-align: center;
+    max-width: 320px;
+    padding: 2.5rem 2rem;
+}
+.recap-mood-dot {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    margin: 0 auto 1.5rem;
+    background: var(--amber);
+    opacity: 0.8;
+}
+.recap-mood-dot[data-mood="heavy"] { background: #7a6f8a; }
+.recap-mood-dot[data-mood="sad"] { background: #5e7a9a; }
+.recap-mood-dot[data-mood="frustrated"] { background: #c45e20; }
+.recap-mood-dot[data-mood="anxious"] { background: #b8a040; }
+.recap-mood-dot[data-mood="relieved"] { background: #5a9a6a; }
+.recap-mood-dot[data-mood="calm"] { background: #6a8a7a; }
+.recap-mood-dot[data-mood="mixed"] { background: linear-gradient(135deg, #7a6f8a, #c45e20); }
+.recap-summary {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.15rem;
+    color: var(--text);
+    line-height: 1.6;
+    margin-bottom: 0.8rem;
+}
+.recap-meta {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+    margin-bottom: 2rem;
+}
+.recap-close-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    color: var(--bg);
+    background: var(--amber);
+    border: none;
+    border-radius: 100px;
+    padding: 0.7rem 2.5rem;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s;
+}
+.recap-close-btn:hover {
+    transform: scale(1.03);
+    box-shadow: 0 0 20px rgba(244, 162, 97, 0.3);
+}
+
 /* ── Download Banner ── */
 .download-banner {
     position: fixed;

@@ -120,6 +120,58 @@ async def generate_response_streaming(
     return full_text
 
 
+RECAP_PROMPT = """You are summarizing a conversation where someone vented to a listener called Sunno.
+Write ONE short sentence (max 15 words) reflecting what they talked about. Not advice — just a mirror.
+Also pick the dominant mood: calm, heavy, frustrated, anxious, sad, relieved, mixed.
+
+Examples:
+- "You talked about feeling invisible at work." mood: heavy
+- "Sounds like the breakup is still sitting with you." mood: sad
+- "A lot of frustration about your roommate situation." mood: frustrated
+
+Respond in this exact format:
+summary: <one line>
+mood: <one word>"""
+
+
+async def generate_recap(conversation_history: list[dict]) -> tuple[str, str]:
+    """Generate a one-line session recap. Returns (summary, mood)."""
+    if not GROQ_API_KEY:
+        return "Thanks for talking.", "neutral"
+
+    messages = [{"role": "system", "content": RECAP_PROMPT}]
+
+    # Build a compact transcript
+    lines = []
+    for turn in conversation_history[-20:]:  # last 20 messages
+        role = "Person" if turn["role"] == "user" else "Sunno"
+        lines.append(f"{role}: {turn['content']}")
+    messages.append({"role": "user", "content": "\n".join(lines)})
+
+    try:
+        response = await asyncio.to_thread(
+            lambda: get_groq().chat.completions.create(
+                model=GROQ_MODEL,
+                messages=messages,
+                max_tokens=50,
+                temperature=0.5,
+            )
+        )
+        text = response.choices[0].message.content.strip()
+        # Parse response
+        summary = "Thanks for talking."
+        mood = "neutral"
+        for line in text.split("\n"):
+            if line.lower().startswith("summary:"):
+                summary = line.split(":", 1)[1].strip().strip('"')
+            elif line.lower().startswith("mood:"):
+                mood = line.split(":", 1)[1].strip().lower()
+        return summary, mood
+    except Exception as e:
+        logger.error(f"Recap generation failed: {e}")
+        return "Thanks for talking.", "neutral"
+
+
 LANGUAGE_NAMES = {
     "en": "English", "hi": "Hindi", "ta": "Tamil", "te": "Telugu",
     "bn": "Bengali", "mr": "Marathi", "kn": "Kannada", "gu": "Gujarati",

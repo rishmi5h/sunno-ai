@@ -71,6 +71,28 @@ class ChatResponse(BaseModel):
     emotion: str = "neutral"
 
 
+class RecapRequest(BaseModel):
+    conversation_history: list[dict] = []
+
+
+class RecapResponse(BaseModel):
+    summary: str
+    mood: str = "neutral"
+    message_count: int = 0
+
+
+@app.post("/api/recap", response_model=RecapResponse)
+async def recap_endpoint(req: RecapRequest):
+    """Generate a one-line session recap from conversation history."""
+    if not req.conversation_history:
+        return RecapResponse(summary="", message_count=0)
+
+    from voice_pipeline import generate_recap
+    summary, mood = await generate_recap(req.conversation_history)
+    user_msgs = sum(1 for m in req.conversation_history if m.get("role") == "user")
+    return RecapResponse(summary=summary, mood=mood, message_count=user_msgs)
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(req: ChatRequest):
     """Groq-powered chat endpoint for devices without WebGPU."""

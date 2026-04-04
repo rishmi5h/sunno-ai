@@ -42,6 +42,14 @@ const llmDeleteBtn = document.getElementById("llm-delete-btn");
 const settingsProgressFill = document.getElementById("settings-progress-fill");
 const settingsProgressText = document.getElementById("settings-progress-text");
 
+// Session recap
+const endSessionBtn = document.getElementById("end-session-btn");
+const recapOverlay = document.getElementById("recap-overlay");
+const recapSummary = document.getElementById("recap-summary");
+const recapMeta = document.getElementById("recap-meta");
+const recapMoodDot = document.getElementById("recap-mood-dot");
+const recapClose = document.getElementById("recap-close");
+
 // Language
 const LANGUAGES = {
     auto:    { label: "Auto",     sttCode: "en-IN", name: "Auto-detect from speech" },
@@ -561,6 +569,11 @@ async function processLocalPipeline(transcript) {
     await speakResponse(responseText);
 
     SunnoOnboarding.onConversationComplete();
+
+    // Show "End session" button after 3+ messages
+    if (msgCount >= 3 && endSessionBtn) {
+        endSessionBtn.classList.remove("hidden");
+    }
 
     // Show download banner after 3 messages if device supports local and model not cached
     if (msgCount >= 3 && !isDownloading) {
@@ -1439,6 +1452,59 @@ function drawOrb() {
     }
 
     requestAnimationFrame(drawOrb);
+}
+
+// ── Session Recap ──
+if (endSessionBtn) {
+    endSessionBtn.addEventListener("click", async () => {
+        const history = SunnoStorage.getHistory(sessionId);
+        if (history.length < 2) return;
+
+        endSessionBtn.textContent = "Reflecting...";
+        endSessionBtn.disabled = true;
+
+        try {
+            const base = window.BACKEND_URL ? `https://${window.BACKEND_URL}` : "";
+            const resp = await fetch(`${base}/api/recap`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ conversation_history: history }),
+            });
+
+            if (!resp.ok) throw new Error("Recap failed");
+            const data = await resp.json();
+
+            recapSummary.textContent = data.summary || "Thanks for talking.";
+            recapMoodDot.setAttribute("data-mood", data.mood || "neutral");
+            recapMeta.textContent = `${data.message_count || 0} messages this session`;
+            recapOverlay.classList.remove("hidden");
+        } catch (err) {
+            console.error("Recap error:", err);
+            recapSummary.textContent = "Thanks for talking.";
+            recapMoodDot.setAttribute("data-mood", "calm");
+            recapMeta.textContent = "";
+            recapOverlay.classList.remove("hidden");
+        } finally {
+            endSessionBtn.textContent = "End session";
+            endSessionBtn.disabled = false;
+        }
+    });
+}
+
+if (recapClose) {
+    recapClose.addEventListener("click", () => {
+        recapOverlay.classList.add("hidden");
+        // Reset session
+        sessionId = (crypto.randomUUID ? crypto.randomUUID() :
+            "xxxx-xxxx-xxxx".replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
+        SunnoStorage.setPreference("msg_count", 0);
+        if (endSessionBtn) endSessionBtn.classList.add("hidden");
+        if (transcriptArea) transcriptArea.innerHTML = "";
+        statusEl.textContent = "Tap to talk";
+        // Reconnect WebSocket with new session
+        if (ws) ws.close();
+        setTimeout(connectWebSocket, 500);
+    });
 }
 
 // ── Onboarding init ──

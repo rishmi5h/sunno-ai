@@ -95,6 +95,19 @@
 
             <!-- Subtle transcript (for accessibility) -->
             <div id="transcript-area" class="transcript-area" aria-live="polite"></div>
+
+            <!-- End session button (appears after 3+ messages) -->
+            <button id="end-session-btn" class="end-session-btn hidden">End session</button>
+        </div>
+
+        <!-- Session recap overlay -->
+        <div id="recap-overlay" class="recap-overlay hidden">
+            <div class="recap-card">
+                <div class="recap-mood-dot" id="recap-mood-dot"></div>
+                <p class="recap-summary" id="recap-summary"></p>
+                <p class="recap-meta" id="recap-meta"></p>
+                <button id="recap-close" class="recap-close-btn">Done</button>
+            </div>
         </div>
 
         <!-- Download banner (shown after a few conversations) -->
