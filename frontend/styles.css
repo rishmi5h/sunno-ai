@@ -393,6 +393,161 @@ html, body {
     background: rgba(255, 255, 255, 0.05);
 }
 
+/* ── Remaining Time Display ── */
+.remaining-time {
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    text-align: center;
+    margin-bottom: 0.3rem;
+    opacity: 0.6;
+}
+.remaining-time.warning {
+    color: #e07a5f;
+    opacity: 0.9;
+}
+
+/* ── Minute Limit Banner ── */
+.minute-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(224, 122, 95, 0.15);
+    border-top: 1px solid rgba(224, 122, 95, 0.3);
+    padding: 0.7rem 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 55;
+    animation: slideUp 0.3s ease-out;
+}
+.minute-banner.hidden { display: none; }
+.minute-banner p {
+    font-size: 0.82rem;
+    color: #e07a5f;
+    margin: 0;
+}
+.minute-banner-close {
+    background: none;
+    border: none;
+    color: #e07a5f;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.2rem;
+    opacity: 0.6;
+}
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+/* ── Paywall Overlay ── */
+.paywall-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 8, 14, 0.9);
+    backdrop-filter: blur(20px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 75;
+    animation: fadeIn 0.4s ease-out;
+}
+.paywall-overlay.hidden { display: none; }
+.paywall-card {
+    text-align: center;
+    max-width: 340px;
+    padding: 2.5rem 2rem;
+}
+.paywall-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.7;
+}
+.paywall-title {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.6rem;
+}
+.paywall-sub {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+}
+.paywall-perks {
+    text-align: left;
+    margin: 0 auto 1.5rem;
+    max-width: 220px;
+}
+.perk-item {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    padding: 0.25rem 0;
+}
+.perk-item:first-child { color: var(--amber); }
+.waitlist-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+.waitlist-input {
+    flex: 1;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    padding: 0.6rem 0.9rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    outline: none;
+}
+.waitlist-input:focus {
+    border-color: var(--amber);
+}
+.waitlist-input::placeholder {
+    color: var(--text-faint);
+}
+.waitlist-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.6rem 1.2rem;
+    border-radius: 100px;
+    border: none;
+    background: var(--amber);
+    color: var(--bg);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform 0.15s;
+}
+.waitlist-btn:hover { transform: scale(1.03); }
+.waitlist-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+    transform: none;
+}
+.waitlist-status {
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    min-height: 1.2em;
+    margin-bottom: 1rem;
+}
+.paywall-dismiss {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    color: var(--text-faint);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 100px;
+    padding: 0.5rem 1.5rem;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+.paywall-dismiss:hover { color: var(--text-dim); }
+
 /* ── End Session Button ── */
 .end-session-btn {
     font-family: 'DM Sans', sans-serif;

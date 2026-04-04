@@ -108,6 +108,50 @@ const SunnoStorage = (() => {
         return getPreference("msg_count", 0);
     }
 
+    // ── Usage Tracking (minutes-based freemium) ──
+    const FREE_MINUTES_PER_DAY = 15;
+
+    function _todayKey() {
+        return new Date().toISOString().slice(0, 10); // "2026-04-05"
+    }
+
+    function getUsageToday() {
+        const savedDate = getPreference("usage_date", "");
+        if (savedDate !== _todayKey()) {
+            // New day — reset usage
+            setPreference("usage_date", _todayKey());
+            setPreference("usage_seconds", 0);
+            return 0;
+        }
+        return getPreference("usage_seconds", 0);
+    }
+
+    function addUsage(seconds) {
+        const today = _todayKey();
+        if (getPreference("usage_date", "") !== today) {
+            setPreference("usage_date", today);
+            setPreference("usage_seconds", 0);
+        }
+        const current = getPreference("usage_seconds", 0);
+        setPreference("usage_seconds", current + seconds);
+        return current + seconds;
+    }
+
+    function getRemainingMinutes() {
+        const usedSeconds = getUsageToday();
+        const remaining = FREE_MINUTES_PER_DAY - (usedSeconds / 60);
+        return Math.max(0, Math.round(remaining * 10) / 10); // 1 decimal
+    }
+
+    function isLimitReached() {
+        return getRemainingMinutes() <= 0;
+    }
+
+    function getUsagePercent() {
+        const usedSeconds = getUsageToday();
+        return Math.min(100, (usedSeconds / (FREE_MINUTES_PER_DAY * 60)) * 100);
+    }
+
     // Run cleanup on load
     cleanupExpired();
 
@@ -115,5 +159,8 @@ const SunnoStorage = (() => {
         getHistory, saveMessage, clearSession,
         getPreference, setPreference,
         incrementMessageCount, getMessageCount,
+        getUsageToday, addUsage, getRemainingMinutes,
+        isLimitReached, getUsagePercent,
+        FREE_MINUTES_PER_DAY,
     };
 })();

@@ -17,6 +17,7 @@ let isDownloading = false;
 let isOnline = navigator.onLine;
 let pipelineMode = "cloud"; // "cloud" | "onnx" — negotiated with server
 let onnxAudioReady = false; // SunnoAudio initialized
+let recordingStartTime = 0; // tracks when recording started for usage metering
 
 // ── DOM ──
 const landing = document.getElementById("landing");
@@ -41,6 +42,18 @@ const llmCachedRow = document.getElementById("llm-cached-row");
 const llmDeleteBtn = document.getElementById("llm-delete-btn");
 const settingsProgressFill = document.getElementById("settings-progress-fill");
 const settingsProgressText = document.getElementById("settings-progress-text");
+
+// Usage & paywall
+const remainingTimeEl = document.getElementById("remaining-time");
+const minuteBanner = document.getElementById("minute-banner");
+const minuteBannerText = document.getElementById("minute-banner-text");
+const minuteBannerDismiss = document.getElementById("minute-banner-dismiss");
+const paywallOverlay = document.getElementById("paywall-overlay");
+const waitlistEmail = document.getElementById("waitlist-email");
+const waitlistSubmit = document.getElementById("waitlist-submit");
+const waitlistStatus = document.getElementById("waitlist-status");
+const paywallDismiss = document.getElementById("paywall-dismiss");
+let minuteBannerDismissed = false;
 
 // Session recap
 const endSessionBtn = document.getElementById("end-session-btn");
@@ -218,6 +231,12 @@ async function startSession() {
     if (savedAmbient !== "silence") {
         SunnoAmbient.setSound(savedAmbient);
         SunnoAmbient.start();
+    }
+
+    // Check usage limit on session start
+    updateRemainingTime();
+    if (SunnoStorage.isLimitReached()) {
+        showPaywall();
     }
 
     // Update offline indicator
@@ -509,9 +528,16 @@ function setupWebSpeech() {
 
     recognition.onend = () => {
         // With continuous=true, onend fires when stop() is called or on error.
-        // If we were recording, process the accumulated transcript.
+        // If we were recording, track usage and process transcript.
         if (isRecording) {
             isRecording = false;
+            // Track speaking time
+            if (recordingStartTime > 0) {
+                const elapsedSec = (Date.now() - recordingStartTime) / 1000;
+                SunnoStorage.addUsage(elapsedSec);
+                recordingStartTime = 0;
+                updateRemainingTime();
+            }
             const transcript = pendingTranscript.trim();
             pendingTranscript = "";
             if (transcript) {
@@ -752,6 +778,14 @@ orbContainer.addEventListener("pointerleave", (e) => {
 });
 
 function startRecording() {
+    // Check usage limit before allowing recording
+    if (SunnoStorage.isLimitReached()) {
+        showPaywall();
+        return;
+    }
+
+    recordingStartTime = Date.now();
+
     // ONNX mode: use AudioWorklet + VAD (auto-detects speech end)
     if (pipelineMode === "onnx" && onnxAudioReady) {
         SunnoAudio.startCapture();
@@ -817,10 +851,109 @@ function stopRecording() {
     } else {
         if (!mediaRecorder || mediaRecorder.state !== "recording") return;
         mediaRecorder.stop();
+        // Track speaking time for MediaRecorder path too
+        if (recordingStartTime > 0) {
+            const elapsedSec = (Date.now() - recordingStartTime) / 1000;
+            SunnoStorage.addUsage(elapsedSec);
+            recordingStartTime = 0;
+            updateRemainingTime();
+        }
         isRecording = false;
         setState("thinking");
         if (navigator.vibrate) navigator.vibrate(20);
     }
+}
+
+// ── Usage Display & Paywall ──
+function updateRemainingTime() {
+    const remaining = SunnoStorage.getRemainingMinutes();
+    const pct = SunnoStorage.getUsagePercent();
+
+    // Show remaining time after first use
+    if (remainingTimeEl && pct > 0) {
+        remainingTimeEl.classList.remove("hidden");
+        const mins = Math.ceil(remaining);
+        remainingTimeEl.textContent = `${mins} min remaining today`;
+        if (pct >= 80) {
+            remainingTimeEl.classList.add("warning");
+        } else {
+            remainingTimeEl.classList.remove("warning");
+        }
+    }
+
+    // Show warning banner at 80%
+    if (pct >= 80 && pct < 100 && !minuteBannerDismissed && minuteBanner) {
+        const mins = Math.ceil(remaining);
+        minuteBannerText.textContent = `${mins} minute${mins !== 1 ? "s" : ""} remaining today`;
+        minuteBanner.classList.remove("hidden");
+    }
+
+    // Show paywall at 100%
+    if (pct >= 100) {
+        showPaywall();
+    }
+}
+
+function showPaywall() {
+    if (paywallOverlay) paywallOverlay.classList.remove("hidden");
+    if (minuteBanner) minuteBanner.classList.add("hidden");
+    // Disable orb
+    const orb = document.getElementById("orb-container");
+    if (orb) orb.style.pointerEvents = "none";
+    statusEl.textContent = "Free time used up for today";
+}
+
+function hidePaywall() {
+    if (paywallOverlay) paywallOverlay.classList.add("hidden");
+}
+
+// Paywall event listeners
+if (minuteBannerDismiss) {
+    minuteBannerDismiss.addEventListener("click", () => {
+        minuteBanner.classList.add("hidden");
+        minuteBannerDismissed = true;
+    });
+}
+
+if (paywallDismiss) {
+    paywallDismiss.addEventListener("click", hidePaywall);
+}
+
+if (waitlistSubmit) {
+    waitlistSubmit.addEventListener("click", async () => {
+        const email = waitlistEmail.value.trim();
+        if (!email || !email.includes("@")) {
+            waitlistStatus.textContent = "Please enter a valid email";
+            waitlistStatus.style.color = "#e07a5f";
+            return;
+        }
+
+        waitlistSubmit.disabled = true;
+        waitlistSubmit.textContent = "Joining...";
+
+        try {
+            const base = window.BACKEND_URL ? `https://${window.BACKEND_URL}` : "";
+            const resp = await fetch(`${base}/api/waitlist`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email }),
+            });
+
+            if (resp.ok) {
+                waitlistStatus.textContent = "You're on the list! We'll reach out soon.";
+                waitlistStatus.style.color = "#5a9a6a";
+                waitlistEmail.value = "";
+                waitlistSubmit.textContent = "Joined!";
+            } else {
+                throw new Error("Failed");
+            }
+        } catch {
+            waitlistStatus.textContent = "Couldn't save. Try again?";
+            waitlistStatus.style.color = "#e07a5f";
+            waitlistSubmit.disabled = false;
+            waitlistSubmit.textContent = "Join waitlist";
+        }
+    });
 }
 
 // ── State Management ──

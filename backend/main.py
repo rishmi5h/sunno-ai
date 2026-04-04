@@ -93,6 +93,36 @@ async def recap_endpoint(req: RecapRequest):
     return RecapResponse(summary=summary, mood=mood, message_count=user_msgs)
 
 
+class WaitlistRequest(BaseModel):
+    email: str
+
+
+@app.post("/api/waitlist")
+async def waitlist_endpoint(req: WaitlistRequest):
+    """Collect waitlist emails for premium tier."""
+    import re
+    email = req.email.strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return {"status": "error", "message": "Invalid email"}
+
+    # Save to SQLite
+    import aiosqlite
+    import time as _time
+    db_path = Path(__file__).resolve().parent / "sunno.db"
+    async with aiosqlite.connect(str(db_path)) as db:
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS waitlist (email TEXT PRIMARY KEY, created_at REAL)"
+        )
+        await db.execute(
+            "INSERT OR IGNORE INTO waitlist (email, created_at) VALUES (?, ?)",
+            (email, _time.time()),
+        )
+        await db.commit()
+
+    logger.info(f"Waitlist signup: {email}")
+    return {"status": "ok"}
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(req: ChatRequest):
     """Groq-powered chat endpoint for devices without WebGPU."""

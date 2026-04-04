@@ -90,6 +90,9 @@
                 <canvas id="orb" width="300" height="300"></canvas>
             </div>
 
+            <!-- Remaining time (subtle) -->
+            <p id="remaining-time" class="remaining-time hidden"></p>
+
             <!-- Status text -->
             <p id="status" class="status-text">Tap to talk</p>
 
@@ -98,6 +101,36 @@
 
             <!-- End session button (appears after 3+ messages) -->
             <button id="end-session-btn" class="end-session-btn hidden">End session</button>
+        </div>
+
+        <!-- Minute limit banner (soft warning) -->
+        <div id="minute-banner" class="minute-banner hidden">
+            <p id="minute-banner-text"></p>
+            <button id="minute-banner-dismiss" class="minute-banner-close">&times;</button>
+        </div>
+
+        <!-- Paywall overlay (hard limit) -->
+        <div id="paywall-overlay" class="paywall-overlay hidden">
+            <div class="paywall-card">
+                <div class="paywall-icon">&#9719;</div>
+                <h2 class="paywall-title">Your free time is up for today</h2>
+                <p class="paywall-sub">You've used all 15 free minutes. Come back tomorrow, or get unlimited access.</p>
+
+                <div class="paywall-perks">
+                    <p class="perk-item">&#10003; Unlimited listening</p>
+                    <p class="perk-item">&#10003; Premium warm voices</p>
+                    <p class="perk-item">&#10003; Full privacy mode</p>
+                    <p class="perk-item">&#10003; Mood timeline</p>
+                </div>
+
+                <div class="waitlist-form">
+                    <input type="email" id="waitlist-email" class="waitlist-input" placeholder="your@email.com" />
+                    <button id="waitlist-submit" class="waitlist-btn">Join waitlist</button>
+                </div>
+                <p id="waitlist-status" class="waitlist-status"></p>
+
+                <button id="paywall-dismiss" class="paywall-dismiss">Come back tomorrow</button>
+            </div>
         </div>
 
         <!-- Session recap overlay -->
