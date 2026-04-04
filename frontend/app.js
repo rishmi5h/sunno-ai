@@ -465,58 +465,68 @@ function setupWebSpeech() {
     if (!SpeechRecognition) return;
 
     recognition = new SpeechRecognition();
-    // Use the current language setting for STT
     const langCode = LANGUAGES[currentLang] ? LANGUAGES[currentLang].sttCode : "en-IN";
     recognition.lang = langCode;
-    recognition.continuous = false;
+    recognition.continuous = true;  // Keep listening until user taps stop
     recognition.interimResults = true;
 
+    // Accumulate transcript across multiple results
+    let pendingTranscript = "";
+
     recognition.onresult = (event) => {
-        let interimTranscript = "";
-        let finalTranscript = "";
+        let interim = "";
+        let final = "";
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i];
             if (result.isFinal) {
-                finalTranscript += result[0].transcript;
+                final += result[0].transcript;
             } else {
-                interimTranscript += result[0].transcript;
+                interim += result[0].transcript;
             }
         }
 
-        if (interimTranscript) {
-            showTranscript(interimTranscript, "user");
-        }
+        if (final) pendingTranscript += final + " ";
 
-        if (finalTranscript) {
-            showTranscript(finalTranscript, "user");
-            isRecording = false;
-            setState("thinking");
-            processLocalPipeline(finalTranscript);
-        }
+        // Show what user is saying in real-time
+        const display = pendingTranscript + interim;
+        if (display.trim()) showTranscript(display.trim(), "user");
     };
 
     recognition.onerror = (event) => {
         console.error("Speech recognition error:", event.error);
         if (event.error === "no-speech") {
-            setState("idle");
             statusEl.textContent = "Didn't catch that. Try again?";
             setTimeout(() => {
                 if (state === "idle") statusEl.textContent = "Tap to talk";
             }, 2000);
-        } else {
-            setState("idle");
+        } else if (event.error === "aborted") {
+            // Intentional abort — don't show error
         }
         isRecording = false;
+        setState("idle");
     };
 
     recognition.onend = () => {
+        // With continuous=true, onend fires when stop() is called or on error.
+        // If we were recording, process the accumulated transcript.
         if (isRecording) {
             isRecording = false;
-            setState("idle");
+            const transcript = pendingTranscript.trim();
+            pendingTranscript = "";
+            if (transcript) {
+                setState("thinking");
+                processLocalPipeline(transcript);
+            } else {
+                setState("idle");
+                statusEl.textContent = "Didn't catch that. Try again?";
+                setTimeout(() => {
+                    if (state === "idle") statusEl.textContent = "Tap to talk";
+                }, 2000);
+            }
         }
-        // Web Speech API with continuous=false enters terminal state after each use.
-        // Reinitialize so the next startRecording() call works.
+        pendingTranscript = "";
+        // Reinitialize for next use
         setupWebSpeech();
     };
 }
@@ -796,12 +806,13 @@ function stopRecording() {
 
     if (caps && caps.stt === "web-speech" && recognition) {
         try {
+            // recognition.stop() triggers onend, which processes the transcript
             recognition.stop();
         } catch {
             // Ignore if already stopped
+            isRecording = false;
+            setState("idle");
         }
-        isRecording = false;
-        setState("thinking");
         if (navigator.vibrate) navigator.vibrate(20);
     } else {
         if (!mediaRecorder || mediaRecorder.state !== "recording") return;
