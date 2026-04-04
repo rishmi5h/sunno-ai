@@ -465,7 +465,9 @@ function setupWebSpeech() {
     if (!SpeechRecognition) return;
 
     recognition = new SpeechRecognition();
-    recognition.lang = "en-IN";
+    // Use the current language setting for STT
+    const langCode = LANGUAGES[currentLang] ? LANGUAGES[currentLang].sttCode : "en-IN";
+    recognition.lang = langCode;
     recognition.continuous = false;
     recognition.interimResults = true;
 
@@ -513,6 +515,9 @@ function setupWebSpeech() {
             isRecording = false;
             setState("idle");
         }
+        // Web Speech API with continuous=false enters terminal state after each use.
+        // Reinitialize so the next startRecording() call works.
+        setupWebSpeech();
     };
 }
 
@@ -613,8 +618,10 @@ async function speakResponse(text) {
                 onEnd: () => setState("idle"),
             });
         } catch {
-            setState("idle");
+            // Ensure we always return to idle
         }
+        // Safety: always reset to idle after speech (handles edge cases where onEnd doesn't fire)
+        if (state === "speaking") setState("idle");
     } else {
         setState("idle");
     }
@@ -752,7 +759,21 @@ function startRecording() {
             setState("recording");
             if (navigator.vibrate) navigator.vibrate(30);
         } catch (err) {
-            console.error("Speech recognition start error:", err);
+            // Recognition may be in terminal state — reinitialize and retry
+            console.warn("Recognition start failed, reinitializing:", err.message);
+            setupWebSpeech();
+            try {
+                recognition.start();
+                isRecording = true;
+                setState("recording");
+                if (navigator.vibrate) navigator.vibrate(30);
+            } catch (retryErr) {
+                console.error("Recognition start failed after reinit:", retryErr);
+                isRecording = false;
+                setState("idle");
+                statusEl.textContent = "Voice recognition unavailable. Try again?";
+                setTimeout(() => { if (state === "idle") statusEl.textContent = "Tap to talk"; }, 3000);
+            }
         }
     } else {
         if (!mediaRecorder || mediaRecorder.state === "recording") return;
