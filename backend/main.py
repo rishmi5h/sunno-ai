@@ -275,17 +275,23 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             logger.warning(f"Failed to send error to {session_id}: {send_err}")
 
 
+# Use absolute path resolution (CWD-independent for uvicorn --app-dir)
+# __file__ may be relative when loaded via uvicorn --app-dir, so use Path(__file__).absolute()
+_BACKEND_DIR = Path(__file__).absolute().parent
+_PROJECT_ROOT = _BACKEND_DIR.parent
+
 # Serve only VAD model for browser-side use (not the full models directory)
 from fastapi.responses import FileResponse
 
 @app.get("/models/silero_vad.onnx")
 async def serve_vad_model():
-    vad_path = Path(__file__).resolve().parent.parent / "models" / "silero_vad.onnx"
+    vad_path = _PROJECT_ROOT / "models" / "silero_vad.onnx"
     if vad_path.exists():
         return FileResponse(str(vad_path), media_type="application/octet-stream")
     return {"error": "VAD model not found"}
 
 # Serve frontend — only if directory exists (frontend is on Netlify in production)
-frontend_path = Path(__file__).resolve().parent.parent / "frontend"
+frontend_path = _PROJECT_ROOT / "frontend"
+logger.info(f"Frontend path: {frontend_path} (exists: {frontend_path.is_dir()})")
 if frontend_path.is_dir():
     app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
