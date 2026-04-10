@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Caveat:wght@600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
     <!-- Landing screen -->
@@ -101,6 +101,15 @@
 
             <!-- End session button (appears after 3+ messages) -->
             <button id="end-session-btn" class="end-session-btn hidden">End session</button>
+
+            <!-- Breathing exercise button (hidden until discovered) -->
+            <button id="breathe-btn" class="breathe-btn hidden" aria-label="Guided breathing exercise">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="4"/>
+                    <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+                </svg>
+                <span>Breathe</span>
+            </button>
         </div>
 
         <!-- Minute limit banner (soft warning) -->
@@ -315,7 +324,7 @@
     <script src="onboarding.js"></script>
 
     <!-- Main app -->
-    <script src="app.js"></script>
+    <script src="app.js?v=10"></script>
 
     <!-- Service Worker registration -->
     <script>

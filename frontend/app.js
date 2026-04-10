@@ -8,7 +8,7 @@ let audioChunks = [];
 let isRecording = false;
 let sessionId = (crypto.randomUUID ? crypto.randomUUID() :
     "xxxx-xxxx-xxxx".replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
-let state = "idle"; // idle | recording | thinking | speaking
+let state = "idle"; // idle | recording | thinking | speaking | breathing
 let analyser = null;
 let audioDataArray = null;
 let recognition = null; // Web Speech API
@@ -18,6 +18,15 @@ let isOnline = navigator.onLine;
 let pipelineMode = "cloud"; // "cloud" | "onnx" — negotiated with server
 let onnxAudioReady = false; // SunnoAudio initialized
 let recordingStartTime = 0; // tracks when recording started for usage metering
+
+// Breathing exercise state
+let breathingStartTime = 0;
+let breathingTimers = [];
+const BREATHING_CYCLES = 4;
+const BREATHING_INHALE_MS = 4000;
+const BREATHING_HOLD_MS = 7000;
+const BREATHING_EXHALE_MS = 8000;
+const BREATHING_CYCLE_MS = BREATHING_INHALE_MS + BREATHING_HOLD_MS + BREATHING_EXHALE_MS;
 
 // ── DOM ──
 const landing = document.getElementById("landing");
@@ -57,6 +66,7 @@ let minuteBannerDismissed = false;
 
 // Session recap
 const endSessionBtn = document.getElementById("end-session-btn");
+const breatheBtn = document.getElementById("breathe-btn");
 const recapOverlay = document.getElementById("recap-overlay");
 const recapSummary = document.getElementById("recap-summary");
 const recapMeta = document.getElementById("recap-meta");
@@ -237,6 +247,11 @@ async function startSession() {
     updateRemainingTime();
     if (SunnoStorage.isLimitReached()) {
         showPaywall();
+    }
+
+    // Reveal breathe button if already discovered
+    if (SunnoStorage.getPreference("breathing_discovered", false)) {
+        revealBreatheButton();
     }
 
     // Update offline indicator
@@ -578,6 +593,12 @@ async function processLocalPipeline(transcript) {
     // Detect emotion
     const emotion = SunnoSafety.detectEmotion(transcript);
 
+    // Track anxious emotion for breathing discovery
+    if (emotion === "anxious") {
+        const count = SunnoStorage.getPreference("anxious_count", 0);
+        SunnoStorage.setPreference("anxious_count", count + 1);
+    }
+
     // Get conversation history from local storage
     const history = SunnoStorage.getHistory(sessionId);
 
@@ -615,6 +636,9 @@ async function processLocalPipeline(transcript) {
     if (msgCount >= 3 && endSessionBtn) {
         endSessionBtn.classList.remove("hidden");
     }
+
+    // Check if we should reveal breathing feature
+    maybeShowBreathingHint();
 
     // Show download banner after 3 messages if device supports local and model not cached
     if (msgCount >= 3 && !isDownloading) {
@@ -660,6 +684,141 @@ async function speakResponse(text) {
         if (state === "speaking") setState("idle");
     } else {
         setState("idle");
+    }
+}
+
+// ── Breathing Exercise ──
+function startBreathingExercise() {
+    if (state !== "idle") return;
+
+    breathingStartTime = Date.now();
+    setState("breathing");
+    if (breatheBtn) breatheBtn.classList.add("active");
+
+    // Schedule status text cycle for each phase of each cycle
+    const clearAll = () => { breathingTimers.forEach(t => clearTimeout(t)); breathingTimers = []; };
+    clearAll();
+
+    for (let i = 0; i < BREATHING_CYCLES; i++) {
+        const cycleStart = i * BREATHING_CYCLE_MS;
+        // Inhale
+        breathingTimers.push(setTimeout(() => {
+            if (state === "breathing") statusEl.textContent = "Breathe in...";
+        }, cycleStart));
+        // Hold
+        breathingTimers.push(setTimeout(() => {
+            if (state === "breathing") statusEl.textContent = "Hold...";
+        }, cycleStart + BREATHING_INHALE_MS));
+        // Exhale
+        breathingTimers.push(setTimeout(() => {
+            if (state === "breathing") statusEl.textContent = "Breathe out...";
+        }, cycleStart + BREATHING_INHALE_MS + BREATHING_HOLD_MS));
+    }
+
+    // After all cycles — show "Nice." briefly then return to idle
+    const totalMs = BREATHING_CYCLES * BREATHING_CYCLE_MS;
+    breathingTimers.push(setTimeout(() => {
+        if (state === "breathing") {
+            statusEl.textContent = "Nice.";
+            breathingTimers.push(setTimeout(() => {
+                stopBreathingExercise();
+            }, 2000));
+        }
+    }, totalMs));
+}
+
+function stopBreathingExercise() {
+    breathingTimers.forEach(t => clearTimeout(t));
+    breathingTimers = [];
+    breathingStartTime = 0;
+    if (breatheBtn) breatheBtn.classList.remove("active");
+    if (state === "breathing") {
+        setState("idle");
+    }
+}
+
+// Breathing phase helper for orb animation
+// Returns { phase: "inhale"|"hold"|"exhale", progress: 0-1 } or null if not breathing
+function getBreathingPhase() {
+    if (state !== "breathing" || !breathingStartTime) return null;
+    const elapsed = Date.now() - breathingStartTime;
+    const totalMs = BREATHING_CYCLES * BREATHING_CYCLE_MS;
+    if (elapsed >= totalMs) return { phase: "hold", progress: 1 }; // post-cycles ("Nice.")
+    const inCycle = elapsed % BREATHING_CYCLE_MS;
+    if (inCycle < BREATHING_INHALE_MS) {
+        return { phase: "inhale", progress: inCycle / BREATHING_INHALE_MS };
+    } else if (inCycle < BREATHING_INHALE_MS + BREATHING_HOLD_MS) {
+        return { phase: "hold", progress: (inCycle - BREATHING_INHALE_MS) / BREATHING_HOLD_MS };
+    } else {
+        return { phase: "exhale", progress: (inCycle - BREATHING_INHALE_MS - BREATHING_HOLD_MS) / BREATHING_EXHALE_MS };
+    }
+}
+
+// Ease-in-out cubic
+function easeInOut(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+// Reveal breathing feature based on progressive discovery rules
+function maybeShowBreathingHint() {
+    const discovered = SunnoStorage.getPreference("breathing_discovered", false);
+    if (discovered) {
+        // Already unlocked — ensure button is visible
+        revealBreatheButton();
+        return;
+    }
+
+    const conversations = parseInt(SunnoStorage.getPreference("onboarding_conversations", "0"), 10);
+    const anxiousCount = SunnoStorage.getPreference("anxious_count", 0);
+
+    if (conversations >= 5 || anxiousCount >= 3) {
+        // Show one-time discovery hint 2s after conversation ends
+        setTimeout(() => {
+            if (state !== "idle") return;
+            showBreathingDiscoveryHint();
+            SunnoStorage.setPreference("breathing_discovered", true);
+            revealBreatheButton();
+        }, 2000);
+    }
+}
+
+function showBreathingDiscoveryHint() {
+    // Reuse the .onboarding-hint CSS pattern
+    const hint = document.createElement("div");
+    hint.className = "onboarding-hint";
+    hint.style.top = "auto";
+    hint.style.bottom = "20%";
+    hint.style.left = "50%";
+    hint.style.transform = "translateX(-50%)";
+
+    const text = document.createElement("p");
+    text.className = "hint-text";
+    text.textContent = "When anxiety hits, I can guide you through breathing. Tap the breathe button any time.";
+    hint.appendChild(text);
+
+    const dismiss = document.createElement("button");
+    dismiss.className = "hint-dismiss";
+    dismiss.textContent = "\u00d7";
+    dismiss.addEventListener("click", () => {
+        hint.classList.add("fading");
+        setTimeout(() => hint.remove(), 400);
+    });
+    hint.appendChild(dismiss);
+
+    document.body.appendChild(hint);
+
+    // Auto-dismiss after 8s
+    setTimeout(() => {
+        if (hint.parentNode) {
+            hint.classList.add("fading");
+            setTimeout(() => hint.remove(), 400);
+        }
+    }, 8000);
+}
+
+function revealBreatheButton() {
+    if (breatheBtn && state === "idle") {
+        breatheBtn.classList.remove("hidden");
     }
 }
 
@@ -973,6 +1132,9 @@ function setState(newState) {
             break;
         case "speaking":
             statusEl.textContent = "";
+            break;
+        case "breathing":
+            // Text is updated by breathing timers — leave current text
             break;
     }
 }
@@ -1494,6 +1656,27 @@ function drawOrb() {
     } else if (state === "speaking") {
         targetRadius = baseRadius + 4 + Math.sin(orbTime * 4) * 7 + Math.sin(orbTime * 6.5) * 3;
         targetGlow = 0.2 + Math.sin(orbTime * 4) * 0.08;
+    } else if (state === "breathing") {
+        const phase = getBreathingPhase();
+        if (phase) {
+            const eased = easeInOut(phase.progress);
+            if (phase.phase === "inhale") {
+                // Grow from base to base * 1.5
+                targetRadius = baseRadius + (baseRadius * 0.5) * eased;
+                targetGlow = 0.12 + eased * 0.15;
+            } else if (phase.phase === "hold") {
+                // Stay expanded, gentle glow pulse
+                targetRadius = baseRadius * 1.5;
+                targetGlow = 0.27 + Math.sin(orbTime * 2) * 0.03;
+            } else { // exhale
+                // Shrink back to base
+                targetRadius = baseRadius * 1.5 - (baseRadius * 0.5) * eased;
+                targetGlow = 0.27 - eased * 0.15;
+            }
+        } else {
+            targetRadius = baseRadius;
+            targetGlow = 0.12;
+        }
     }
 
     smoothRadius += (targetRadius - smoothRadius) * 0.12;
@@ -1671,6 +1854,27 @@ if (recapClose) {
         setTimeout(connectWebSocket, 500);
     });
 }
+
+// ── Breathe button handler ──
+if (breatheBtn) {
+    breatheBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (state === "breathing") {
+            stopBreathingExercise();
+        } else if (state === "idle") {
+            startBreathingExercise();
+        }
+    });
+}
+
+// Tap anywhere during breathing to exit early
+document.addEventListener("pointerdown", (e) => {
+    if (state === "breathing") {
+        // Ignore clicks on the breathe button itself (handled separately)
+        if (e.target.closest("#breathe-btn")) return;
+        stopBreathingExercise();
+    }
+});
 
 // ── Onboarding init ──
 SunnoOnboarding.initLanding();
