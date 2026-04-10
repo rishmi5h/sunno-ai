@@ -67,6 +67,7 @@ let minuteBannerDismissed = false;
 // Session recap
 const endSessionBtn = document.getElementById("end-session-btn");
 const breatheBtn = document.getElementById("breathe-btn");
+const breatheMenuBtn = document.getElementById("breathe-menu-btn");
 const recapOverlay = document.getElementById("recap-overlay");
 const recapSummary = document.getElementById("recap-summary");
 const recapMeta = document.getElementById("recap-meta");
@@ -1863,6 +1864,21 @@ if (breatheBtn) {
             stopBreathingExercise();
         } else if (state === "idle") {
             startBreathingExercise();
+        }
+    });
+}
+
+// Breathe from settings menu — always available
+if (breatheMenuBtn) {
+    breatheMenuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        // Close settings panel and start exercise
+        settingsPanel.classList.add("hidden");
+        if (state === "breathing") {
+            stopBreathingExercise();
+        } else if (state === "idle") {
+            // Small delay so the panel close animation runs smoothly
+            setTimeout(() => startBreathingExercise(), 250);
         }
     });
 }

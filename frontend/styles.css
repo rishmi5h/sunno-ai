@@ -566,6 +566,52 @@ html, body {
     color: var(--text-dim);
 }
 
+/* ── Wellness item in settings ── */
+.wellness-item {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    width: 100%;
+    padding: 0.75rem 0.9rem;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    cursor: pointer;
+    text-align: left;
+    font-family: 'DM Sans', sans-serif;
+    transition: background 0.2s, border-color 0.2s;
+}
+.wellness-item:hover {
+    background: rgba(244, 162, 97, 0.06);
+    border-color: rgba(244, 162, 97, 0.2);
+}
+.wellness-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(244, 162, 97, 0.12);
+    color: var(--amber);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.wellness-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+.wellness-title {
+    font-size: 0.88rem;
+    color: var(--text);
+    font-weight: 500;
+}
+.wellness-sub {
+    font-size: 0.72rem;
+    color: var(--text-faint);
+}
+
 /* ── Breathe Button ── */
 .breathe-btn {
     font-family: 'DM Sans', sans-serif;
