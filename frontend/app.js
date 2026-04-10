@@ -1868,17 +1868,19 @@ if (breatheBtn) {
     });
 }
 
-// Breathe from settings menu — always available
+// Breathe from settings menu — reveals the breathe button near orb, user taps to start
 if (breatheMenuBtn) {
     breatheMenuBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        // Close settings panel and start exercise
+        // Close settings panel and reveal the breathe button so user can start when ready
         settingsPanel.classList.add("hidden");
-        if (state === "breathing") {
-            stopBreathingExercise();
-        } else if (state === "idle") {
-            // Small delay so the panel close animation runs smoothly
-            setTimeout(() => startBreathingExercise(), 250);
+        revealBreatheButton();
+        // Highlight the button briefly so the user notices it
+        if (breatheBtn) {
+            setTimeout(() => {
+                breatheBtn.classList.add("pulse");
+                setTimeout(() => breatheBtn.classList.remove("pulse"), 2000);
+            }, 350);
         }
     });
 }

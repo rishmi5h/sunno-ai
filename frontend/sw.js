@@ -1,7 +1,7 @@
 // ── Sunno Service Worker ──
 // Caches app shell for offline support. WebLLM model files are cached by the library itself.
 
-const CACHE_NAME = "sunno-v11";
+const CACHE_NAME = "sunno-v12";
 const APP_SHELL = [
     "/",
     "/index.html",

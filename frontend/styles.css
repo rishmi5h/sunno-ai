@@ -640,6 +640,15 @@ html, body {
 }
 .breathe-btn svg { opacity: 0.7; }
 .breathe-btn.active svg { opacity: 1; }
+.breathe-btn.pulse {
+    animation: breathePulse 1s ease-out 2;
+    border-color: var(--amber);
+    color: var(--amber);
+}
+@keyframes breathePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(244, 162, 97, 0.0); }
+    50% { box-shadow: 0 0 0 8px rgba(244, 162, 97, 0.15); }
+}
 
 /* ── Session Recap Overlay ── */
 .recap-overlay {
