@@ -754,6 +754,26 @@ html, body {
     color: var(--text-faint);
     margin-bottom: 2rem;
 }
+.recap-share-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 100px;
+    padding: 0.5rem 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    margin-bottom: 0.8rem;
+    transition: border-color 0.2s, color 0.2s;
+}
+.recap-share-btn:hover {
+    border-color: rgba(244, 162, 97, 0.3);
+    color: var(--amber);
+}
+.recap-share-btn svg { opacity: 0.6; }
 .recap-close-btn {
     font-family: 'DM Sans', sans-serif;
     font-size: 0.9rem;
