@@ -52,8 +52,13 @@ const llmDeleteBtn = document.getElementById("llm-delete-btn");
 const settingsProgressFill = document.getElementById("settings-progress-fill");
 const settingsProgressText = document.getElementById("settings-progress-text");
 
-// Usage & paywall
+// Usage & paywall & premium
 const remainingTimeEl = document.getElementById("remaining-time");
+const premiumBadge = document.getElementById("premium-badge");
+const subscribeBtn = document.getElementById("subscribe-btn");
+const premiumEmail = document.getElementById("premium-email");
+const paymentStatus = document.getElementById("payment-status");
+const restorePremium = document.getElementById("restore-premium");
 const minuteBanner = document.getElementById("minute-banner");
 const minuteBannerText = document.getElementById("minute-banner-text");
 const minuteBannerDismiss = document.getElementById("minute-banner-dismiss");
@@ -244,10 +249,15 @@ async function startSession() {
         SunnoAmbient.start();
     }
 
-    // Check usage limit on session start
-    updateRemainingTime();
-    if (SunnoStorage.isLimitReached()) {
-        showPaywall();
+    // Check premium or usage limit on session start
+    const premiumData = SunnoStorage.getPremium();
+    if (premiumData) {
+        checkPremiumStatus(premiumData.email);
+    } else {
+        updateRemainingTime();
+        if (SunnoStorage.isLimitReached()) {
+            showPaywall();
+        }
     }
 
     // Reveal breathe button if already discovered
@@ -550,7 +560,7 @@ function setupWebSpeech() {
             // Track speaking time
             if (recordingStartTime > 0) {
                 const elapsedSec = (Date.now() - recordingStartTime) / 1000;
-                SunnoStorage.addUsage(elapsedSec);
+                if (!SunnoStorage.isPremiumUser()) SunnoStorage.addUsage(elapsedSec);
                 recordingStartTime = 0;
                 updateRemainingTime();
             }
@@ -671,17 +681,40 @@ async function callGroqAPI(transcript, history) {
 }
 
 async function speakResponse(text) {
-    if (caps.tts === "speech-synthesis") {
+    if (SunnoStorage.isPremiumUser()) {
+        // Premium: ElevenLabs via backend
+        setState("speaking");
+        try {
+            const premData = SunnoStorage.getPremium();
+            const base = window.BACKEND_URL ? `https://${window.BACKEND_URL}` : "";
+            const resp = await fetch(`${base}/api/tts`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, email: premData.email, mood: currentMood }),
+            });
+            if (resp.ok) {
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+                await new Promise((resolve) => {
+                    audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+                    audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+                    audio.play().catch(resolve);
+                });
+            } else {
+                // Fallback to browser TTS if premium TTS fails
+                await SunnoTTS.speak(text, { onEnd: () => {} });
+            }
+        } catch { /* fall through */ }
+        if (state === "speaking") setState("idle");
+    } else if (caps.tts === "speech-synthesis") {
         setState("speaking");
         try {
             await SunnoTTS.speak(text, {
                 onStart: () => setState("speaking"),
                 onEnd: () => setState("idle"),
             });
-        } catch {
-            // Ensure we always return to idle
-        }
-        // Safety: always reset to idle after speech (handles edge cases where onEnd doesn't fire)
+        } catch { /* fall through */ }
         if (state === "speaking") setState("idle");
     } else {
         setState("idle");
@@ -1026,6 +1059,7 @@ function stopRecording() {
 
 // ── Usage Display & Paywall ──
 function updateRemainingTime() {
+    if (SunnoStorage.isPremiumUser()) return;
     const remaining = SunnoStorage.getRemainingMinutes();
     const pct = SunnoStorage.getUsagePercent();
 
@@ -1801,6 +1835,147 @@ function drawOrb() {
     }
 
     requestAnimationFrame(drawOrb);
+}
+
+// ── Premium Subscription ──
+
+async function checkPremiumStatus(email) {
+    try {
+        const base = window.BACKEND_URL ? `https://${window.BACKEND_URL}` : "";
+        const resp = await fetch(`${base}/api/check-subscription?email=${encodeURIComponent(email)}`);
+        const data = await resp.json();
+        if (data.premium) {
+            SunnoStorage.setPremium(email, data.expires_at);
+            applyPremiumState();
+        } else {
+            SunnoStorage.clearPremium();
+            applyFreeState();
+        }
+    } catch {
+        // Fall back to cached localStorage state
+        if (SunnoStorage.isPremiumUser()) applyPremiumState();
+    }
+}
+
+function applyPremiumState() {
+    if (premiumBadge) premiumBadge.classList.remove("hidden");
+    if (remainingTimeEl) remainingTimeEl.classList.add("hidden");
+    if (minuteBanner) minuteBanner.classList.add("hidden");
+    hidePaywall();
+    // Re-enable orb if it was disabled by paywall
+    const orb = document.getElementById("orb-container");
+    if (orb) orb.style.pointerEvents = "";
+}
+
+function applyFreeState() {
+    if (premiumBadge) premiumBadge.classList.add("hidden");
+    updateRemainingTime();
+}
+
+// Razorpay Checkout
+if (subscribeBtn) {
+    subscribeBtn.addEventListener("click", async () => {
+        const email = premiumEmail.value.trim().toLowerCase();
+        if (!email || !email.includes("@")) {
+            paymentStatus.textContent = "Please enter a valid email";
+            paymentStatus.style.color = "#e07a5f";
+            return;
+        }
+
+        subscribeBtn.disabled = true;
+        paymentStatus.textContent = "Creating order...";
+        paymentStatus.style.color = "var(--text-dim)";
+
+        try {
+            const base = window.BACKEND_URL ? `https://${window.BACKEND_URL}` : "";
+            const orderResp = await fetch(`${base}/api/create-order`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email }),
+            });
+            const orderData = await orderResp.json();
+
+            if (!orderData.order_id) {
+                throw new Error(orderData.message || "Order creation failed");
+            }
+
+            const options = {
+                key: orderData.key_id,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: "Sunno",
+                description: "Premium — Unlimited Listening",
+                order_id: orderData.order_id,
+                prefill: { email },
+                theme: { color: "#f4a261" },
+                handler: async function(response) {
+                    paymentStatus.textContent = "Verifying payment...";
+                    try {
+                        const verifyResp = await fetch(`${base}/api/verify-payment`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                                email,
+                            }),
+                        });
+                        const verifyData = await verifyResp.json();
+                        if (verifyData.premium) {
+                            SunnoStorage.setPremium(email, verifyData.expires_at);
+                            applyPremiumState();
+                            hidePaywall();
+                            paymentStatus.textContent = "";
+                        } else {
+                            paymentStatus.textContent = "Verification failed. Contact support.";
+                            paymentStatus.style.color = "#e07a5f";
+                        }
+                    } catch {
+                        paymentStatus.textContent = "Verification error. Your payment is safe.";
+                        paymentStatus.style.color = "#e07a5f";
+                    }
+                    subscribeBtn.disabled = false;
+                },
+                modal: {
+                    ondismiss: function() {
+                        subscribeBtn.disabled = false;
+                        paymentStatus.textContent = "";
+                    },
+                },
+            };
+
+            const rzp = new Razorpay(options);
+            rzp.open();
+        } catch (err) {
+            paymentStatus.textContent = err.message || "Something went wrong. Try again.";
+            paymentStatus.style.color = "#e07a5f";
+            subscribeBtn.disabled = false;
+        }
+    });
+}
+
+// Restore premium with email
+if (restorePremium) {
+    restorePremium.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const email = premiumEmail.value.trim().toLowerCase();
+        if (!email || !email.includes("@")) {
+            paymentStatus.textContent = "Enter your email above, then tap Restore";
+            paymentStatus.style.color = "#e07a5f";
+            return;
+        }
+        paymentStatus.textContent = "Checking...";
+        paymentStatus.style.color = "var(--text-dim)";
+        await checkPremiumStatus(email);
+        if (SunnoStorage.isPremiumUser()) {
+            hidePaywall();
+            paymentStatus.textContent = "";
+        } else {
+            paymentStatus.textContent = "No active subscription for this email";
+            paymentStatus.style.color = "#e07a5f";
+        }
+    });
 }
 
 // ── Session Recap ──

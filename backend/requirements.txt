@@ -6,6 +6,7 @@ deepgram-sdk>=3.9
 elevenlabs>=1.19
 groq>=0.13
 aiosqlite>=0.20
+razorpay>=1.4
 python-dotenv>=1.0
 textblob>=0.18
 

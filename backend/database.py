@@ -32,6 +32,21 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_messages_session
             ON messages(session_id, created_at)
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                razorpay_order_id TEXT NOT NULL,
+                razorpay_payment_id TEXT NOT NULL,
+                amount_paise INTEGER NOT NULL,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_subscriptions_email
+            ON subscriptions(email, expires_at)
+        """)
         await db.commit()
 
 
@@ -84,3 +99,32 @@ async def get_conversation_history(session_id: str) -> list[dict]:
 
     # Reverse to chronological order
     return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
+
+
+# ── Subscriptions ──
+
+async def save_subscription(email: str, order_id: str, payment_id: str, amount_paise: int, duration_days: int):
+    now = time.time()
+    expires_at = now + duration_days * 86400
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO subscriptions (email, razorpay_order_id, razorpay_payment_id, amount_paise, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (email.lower().strip(), order_id, payment_id, amount_paise, now, expires_at),
+        )
+        await db.commit()
+    return expires_at
+
+
+async def get_active_subscription(email: str) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM subscriptions WHERE email = ? AND expires_at > ? ORDER BY expires_at DESC LIMIT 1",
+            (email.lower().strip(), time.time()),
+        )
+        row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def is_premium(email: str) -> bool:
+    return await get_active_subscription(email) is not None

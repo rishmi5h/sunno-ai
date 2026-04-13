@@ -13,7 +13,8 @@
     <link rel="apple-touch-icon" href="assets/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Caveat:wght@600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=12">
+    <link rel="stylesheet" href="styles.css?v=13">
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body>
     <!-- Landing screen -->
@@ -90,8 +91,9 @@
                 <canvas id="orb" width="300" height="300"></canvas>
             </div>
 
-            <!-- Remaining time (subtle) -->
+            <!-- Remaining time (subtle) / Premium badge -->
             <p id="remaining-time" class="remaining-time hidden"></p>
+            <span id="premium-badge" class="premium-badge hidden">Premium</span>
 
             <!-- Status text -->
             <p id="status" class="status-text">Tap to talk</p>
@@ -123,20 +125,21 @@
             <div class="paywall-card">
                 <div class="paywall-icon">&#9719;</div>
                 <h2 class="paywall-title">Your free time is up for today</h2>
-                <p class="paywall-sub">You've used all 15 free minutes. Come back tomorrow, or get unlimited access.</p>
+                <p class="paywall-sub">Upgrade for unlimited listening + a warm, natural premium voice.</p>
 
                 <div class="paywall-perks">
-                    <p class="perk-item">&#10003; Unlimited listening</p>
-                    <p class="perk-item">&#10003; Premium warm voices</p>
-                    <p class="perk-item">&#10003; Full privacy mode</p>
-                    <p class="perk-item">&#10003; Mood timeline</p>
+                    <p class="perk-item">&#10003; Unlimited listening time</p>
+                    <p class="perk-item">&#10003; Premium warm voice (ElevenLabs)</p>
+                    <p class="perk-item">&#10003; Priority response speed</p>
+                    <p class="perk-item">&#10003; Support Sunno's mission</p>
                 </div>
 
-                <div class="waitlist-form">
-                    <input type="email" id="waitlist-email" class="waitlist-input" placeholder="your@email.com" />
-                    <button id="waitlist-submit" class="waitlist-btn">Join waitlist</button>
+                <div class="premium-form">
+                    <input type="email" id="premium-email" class="waitlist-input" placeholder="your@email.com" />
+                    <button id="subscribe-btn" class="subscribe-btn">Subscribe — &#x20B9;199/month</button>
                 </div>
-                <p id="waitlist-status" class="waitlist-status"></p>
+                <p id="payment-status" class="waitlist-status"></p>
+                <p class="premium-restore">Already subscribed? <a href="#" id="restore-premium">Restore with email</a></p>
 
                 <button id="paywall-dismiss" class="paywall-dismiss">Come back tomorrow</button>
             </div>
@@ -341,7 +344,7 @@
     <script src="onboarding.js"></script>
 
     <!-- Main app -->
-    <script src="app.js?v=12"></script>
+    <script src="app.js?v=13"></script>
 
     <!-- Service Worker registration -->
     <script>

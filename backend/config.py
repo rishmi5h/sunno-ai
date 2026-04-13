@@ -26,6 +26,12 @@ WHISPER_MODEL_PATH = os.getenv("WHISPER_MODEL_PATH", os.path.join(MODELS_DIR, "w
 EMOTION_MODEL_PATH = os.getenv("EMOTION_MODEL_PATH", os.path.join(MODELS_DIR, "emotion-classifier-onnx"))
 PIPER_MODEL_DIR = os.getenv("PIPER_MODEL_DIR", os.path.join(MODELS_DIR, "piper-hi-IN"))
 
+# Razorpay
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+PREMIUM_PRICE_PAISE = 19900  # ₹199
+PREMIUM_DURATION_DAYS = 30
+
 # Feature flags
 ONNX_ENABLED = os.getenv("ONNX_ENABLED", "true").lower() == "true"
 LOG_LATENCY = os.getenv("LOG_LATENCY", "true").lower() == "true"

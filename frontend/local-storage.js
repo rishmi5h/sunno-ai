@@ -144,12 +144,46 @@ const SunnoStorage = (() => {
     }
 
     function isLimitReached() {
+        if (isPremiumUser()) return false;
         return getRemainingMinutes() <= 0;
     }
 
     function getUsagePercent() {
         const usedSeconds = getUsageToday();
         return Math.min(100, (usedSeconds / (FREE_MINUTES_PER_DAY * 60)) * 100);
+    }
+
+    // ── Premium Subscription ──
+    const PREMIUM_KEY = "sunno_premium";
+
+    function setPremium(email, expiresAt) {
+        try {
+            localStorage.setItem(PREMIUM_KEY, JSON.stringify({
+                email: email.toLowerCase().trim(),
+                expiresAt, // Unix timestamp (seconds)
+            }));
+        } catch {}
+    }
+
+    function getPremium() {
+        try {
+            const raw = localStorage.getItem(PREMIUM_KEY);
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            if (data.expiresAt && data.expiresAt * 1000 < Date.now()) {
+                localStorage.removeItem(PREMIUM_KEY);
+                return null;
+            }
+            return data;
+        } catch { return null; }
+    }
+
+    function clearPremium() {
+        localStorage.removeItem(PREMIUM_KEY);
+    }
+
+    function isPremiumUser() {
+        return getPremium() !== null;
     }
 
     // Run cleanup on load
@@ -162,5 +196,6 @@ const SunnoStorage = (() => {
         getUsageToday, addUsage, getRemainingMinutes,
         isLimitReached, getUsagePercent,
         FREE_MINUTES_PER_DAY,
+        setPremium, getPremium, clearPremium, isPremiumUser,
     };
 })();

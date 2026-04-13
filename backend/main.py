@@ -1,18 +1,31 @@
 import base64
+import hashlib
+import hmac
 import json
 import logging
+import re
+import time as _time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import aiosqlite
+import razorpay
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from database import init_db, cleanup_expired, ensure_session, save_message, get_conversation_history
+from database import (
+    init_db, cleanup_expired, ensure_session, save_message,
+    get_conversation_history, save_subscription, get_active_subscription, is_premium,
+)
 from emotion_detector import detect_emotion
 from voice_pipeline import process_voice_streaming, process_voice_onnx, generate_response_groq
-from config import ONNX_ENABLED
+from config import (
+    ONNX_ENABLED, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
+    PREMIUM_PRICE_PAISE, PREMIUM_DURATION_DAYS,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -121,6 +134,113 @@ async def waitlist_endpoint(req: WaitlistRequest):
 
     logger.info(f"Waitlist signup: {email}")
     return {"status": "ok"}
+
+
+# ── Razorpay Payment ──
+
+_razorpay_client = None
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def get_razorpay():
+    global _razorpay_client
+    if _razorpay_client is None:
+        _razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    return _razorpay_client
+
+
+class CreateOrderRequest(BaseModel):
+    email: str
+
+
+@app.post("/api/create-order")
+async def create_order(req: CreateOrderRequest):
+    email = req.email.strip().lower()
+    if not _EMAIL_RE.match(email):
+        return JSONResponse(status_code=400, content={"message": "Invalid email"})
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        return JSONResponse(status_code=503, content={"message": "Payment not configured"})
+
+    try:
+        order = get_razorpay().order.create({
+            "amount": PREMIUM_PRICE_PAISE,
+            "currency": "INR",
+            "receipt": f"sunno_{int(_time.time())}",
+            "notes": {"email": email},
+        })
+        return {
+            "order_id": order["id"],
+            "amount": PREMIUM_PRICE_PAISE,
+            "currency": "INR",
+            "key_id": RAZORPAY_KEY_ID,
+        }
+    except Exception as e:
+        logger.error(f"Razorpay order creation failed: {e}")
+        return JSONResponse(status_code=500, content={"message": "Order creation failed"})
+
+
+class VerifyPaymentRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    email: str
+
+
+@app.post("/api/verify-payment")
+async def verify_payment(req: VerifyPaymentRequest):
+    email = req.email.strip().lower()
+    if not RAZORPAY_KEY_SECRET:
+        return JSONResponse(status_code=503, content={"message": "Payment not configured"})
+
+    # Verify HMAC-SHA256 signature
+    message = f"{req.razorpay_order_id}|{req.razorpay_payment_id}"
+    expected = hmac.new(
+        RAZORPAY_KEY_SECRET.encode(), message.encode(), hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected, req.razorpay_signature):
+        logger.warning(f"Payment verification failed for {email}")
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Verification failed"})
+
+    expires_at = await save_subscription(
+        email, req.razorpay_order_id, req.razorpay_payment_id,
+        PREMIUM_PRICE_PAISE, PREMIUM_DURATION_DAYS,
+    )
+    logger.info(f"Premium subscription: {email} until {expires_at}")
+    return {"status": "ok", "premium": True, "expires_at": expires_at}
+
+
+@app.get("/api/check-subscription")
+async def check_subscription(email: str = ""):
+    email = email.strip().lower()
+    if not email or not _EMAIL_RE.match(email):
+        return {"premium": False}
+    sub = await get_active_subscription(email)
+    if sub:
+        return {"premium": True, "expires_at": sub["expires_at"]}
+    return {"premium": False}
+
+
+class TTSRequest(BaseModel):
+    text: str
+    email: str
+    mood: str = "default"
+
+
+@app.post("/api/tts")
+async def tts_endpoint(req: TTSRequest):
+    """Premium ElevenLabs TTS — requires active subscription."""
+    email = req.email.strip().lower()
+    if not await is_premium(email):
+        return JSONResponse(status_code=403, content={"error": "Premium subscription required"})
+
+    from voice_pipeline import synthesize_speech_streaming
+    try:
+        audio_stream = synthesize_speech_streaming(req.text)
+        return StreamingResponse(audio_stream, media_type="audio/mpeg")
+    except Exception as e:
+        logger.error(f"Premium TTS failed: {e}")
+        return JSONResponse(status_code=500, content={"error": "TTS generation failed"})
 
 
 @app.post("/api/chat", response_model=ChatResponse)

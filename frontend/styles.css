@@ -535,6 +535,63 @@ html, body {
     min-height: 1.2em;
     margin-bottom: 1rem;
 }
+/* Premium form */
+.premium-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+}
+.subscribe-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.92rem;
+    font-weight: 600;
+    width: 100%;
+    padding: 0.8rem 1.2rem;
+    border: none;
+    border-radius: 100px;
+    background: var(--amber);
+    color: var(--bg);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s;
+}
+.subscribe-btn:hover {
+    transform: scale(1.03);
+    box-shadow: 0 0 20px rgba(244, 162, 97, 0.3);
+}
+.subscribe-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+.premium-restore {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    margin-bottom: 1rem;
+}
+.premium-restore a {
+    color: var(--text-dim);
+    text-decoration: underline;
+}
+.premium-restore a:hover {
+    color: var(--amber);
+}
+
+/* Premium badge */
+.premium-badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 100px;
+    background: linear-gradient(135deg, var(--amber), #e07a3a);
+    color: var(--bg);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.premium-badge.hidden { display: none; }
+
 .paywall-dismiss {
     font-family: 'DM Sans', sans-serif;
     font-size: 0.82rem;
