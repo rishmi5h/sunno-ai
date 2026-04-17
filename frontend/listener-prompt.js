@@ -56,6 +56,40 @@ const LISTENER_SYSTEM_PROMPT = `You are Sunno, a warm and patient listener. You 
    iCall: 9152987821 | Vandrevala Foundation: 1860-2662-345. They're really good."
 - Don't panic or over-react. Stay steady and warm.`;
 
+// Listener personas — premium-gated personality types
+const LISTENER_PERSONAS = {
+    default: {
+        label: "Default Sunno",
+        desc: "Warm and present",
+        icon: "\uD83C\uDF19",
+        premium: false,
+    },
+    friend: {
+        label: "Late Night Friend",
+        desc: "Casual, real — like texting at 2am",
+        icon: "\uD83D\uDCAC",
+        premium: true,
+    },
+    bhai: {
+        label: "Tough Love Bhai",
+        desc: "Direct, honest — pushes you gently",
+        icon: "\uD83D\uDCAA",
+        premium: true,
+    },
+    didi: {
+        label: "Gentle Didi",
+        desc: "Nurturing and calming",
+        icon: "\uD83C\uDF38",
+        premium: true,
+    },
+    monk: {
+        label: "Silent Monk",
+        desc: "Minimal — creates space to think",
+        icon: "\uD83E\uDDD8",
+        premium: true,
+    },
+};
+
 // Mood modifiers that adjust the listener's tone
 const LISTENER_MOODS = {
     default: {

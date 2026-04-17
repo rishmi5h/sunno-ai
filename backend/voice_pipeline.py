@@ -84,6 +84,8 @@ async def transcribe_audio(audio_bytes: bytes) -> str:
 async def generate_response_streaming(
     transcript: str,
     conversation_history: list[dict],
+    mood: str = "default",
+    persona: str = "default",
 ) -> str:
     """Generate a listener response using Claude with streaming."""
     if not ANTHROPIC_API_KEY:
@@ -105,12 +107,15 @@ async def generate_response_streaming(
         user_content = f"{emotion_context}\n\n{transcript}"
     messages.append({"role": "user", "content": user_content})
 
+    from listener_prompt import get_listener_prompt
+    system_prompt = get_listener_prompt(mood, persona)
+
     t0 = time.monotonic()
     full_text = ""
     async with get_anthropic().messages.stream(
         model=CLAUDE_MODEL,
         max_tokens=150,
-        system=LISTENER_SYSTEM_PROMPT,
+        system=system_prompt,
         messages=messages,
     ) as stream:
         async for text in stream.text_stream:
@@ -182,6 +187,7 @@ async def generate_response_groq(
     conversation_history: list[dict],
     mood: str = "default",
     language: str = "auto",
+    persona: str = "default",
 ) -> str:
     """Generate a listener response using Groq (Llama) as a fast free fallback."""
     if not GROQ_API_KEY:
@@ -196,7 +202,7 @@ async def generate_response_groq(
     lang_context = f"[Respond in {LANGUAGE_NAMES.get(language, language)}.]" if language != "auto" else ""
 
     from listener_prompt import get_listener_prompt
-    system_prompt = get_listener_prompt(mood)
+    system_prompt = get_listener_prompt(mood, persona)
     messages = [{"role": "system", "content": system_prompt}]
     for turn in conversation_history:
         messages.append({"role": turn["role"], "content": turn["content"]})
@@ -242,6 +248,8 @@ async def process_voice_streaming(
     audio_bytes: bytes,
     conversation_history: list[dict],
     send_message: Callable[[dict], Awaitable[None]],
+    mood: str = "default",
+    persona: str = "default",
 ) -> tuple[str, str]:
     """Streaming voice pipeline: STT → LLM → TTS with real-time audio delivery.
     Sends audio chunks to the client as they arrive from TTS.
@@ -257,7 +265,7 @@ async def process_voice_streaming(
     await send_message({"type": "transcript", "text": transcript})
 
     # Step 2: Generate response (streaming from Claude)
-    response_text = await generate_response_streaming(transcript, conversation_history)
+    response_text = await generate_response_streaming(transcript, conversation_history, mood, persona)
 
     await send_message({"type": "response_text", "text": response_text})
 
@@ -296,6 +304,7 @@ async def process_voice_onnx(
     send_message: Callable[[dict], Awaitable[None]],
     mood: str = "default",
     language: str = "auto",
+    persona: str = "default",
 ) -> tuple[str, str]:
     """ONNX hybrid pipeline: local STT/Emotion/TTS + cloud LLM.
     Audio arrives as 16kHz mono float32 PCM (already VAD-segmented by browser).
@@ -349,7 +358,7 @@ async def process_voice_onnx(
     # Step 4: LLM (cloud — only network call)
     t0 = time.monotonic()
     response_text = await generate_response_groq(
-        transcript, conversation_history, mood, language
+        transcript, conversation_history, mood, language, persona
     )
     timings["llm"] = (time.monotonic() - t0) * 1000
     logger.info(f"Cloud LLM: {timings['llm']:.0f}ms — '{response_text}'")

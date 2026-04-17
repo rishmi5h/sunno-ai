@@ -104,6 +104,11 @@ const moodOptions = document.getElementById("mood-options");
 const moodStatus = document.getElementById("mood-status");
 let currentMood = "default";
 
+// Listener persona (premium-gated personality)
+const personaOptions = document.getElementById("persona-options");
+const personaStatus = document.getElementById("persona-status");
+let currentPersona = "default";
+
 // Voice selection
 const voiceList = document.getElementById("voice-list");
 const voiceStatus = document.getElementById("voice-status");
@@ -239,6 +244,13 @@ async function startSession() {
     // Load saved listener mood
     currentMood = SunnoStorage.getPreference("listener_mood", "default");
     SunnoTTS.setMood(currentMood);
+
+    // Load saved listener persona (revert to default if locked and not premium)
+    currentPersona = SunnoStorage.getPreference("listener_persona", "default");
+    if (LISTENER_PERSONAS[currentPersona]?.premium && !SunnoStorage.isPremiumUser()) {
+        currentPersona = "default";
+        SunnoStorage.setPreference("listener_persona", "default");
+    }
 
     // Start ambient sound if user had a preference
     const savedAmbient = SunnoStorage.getPreference("ambient_sound", "silence");
@@ -440,6 +452,7 @@ function sendOnnxAudio(pcmFloat32) {
         data: b64,
         mood: currentMood,
         language: currentLang,
+        persona: currentPersona,
     }));
 }
 
@@ -669,6 +682,7 @@ async function callGroqAPI(transcript, history) {
             session_id: sessionId,
             mood: currentMood,
             language: currentLang,
+            persona: currentPersona,
         }),
     });
 
@@ -907,7 +921,11 @@ function setupRecorder(stream) {
 
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "audio_chunk", data: base64 }));
-            ws.send(JSON.stringify({ type: "end_turn" }));
+            ws.send(JSON.stringify({
+                type: "end_turn",
+                mood: currentMood,
+                persona: currentPersona,
+            }));
         }
     };
 }
@@ -1441,6 +1459,9 @@ function refreshSettingsUI() {
     // Language
     refreshLanguageUI();
 
+    // Persona (premium-gated)
+    refreshPersonaUI();
+
     // Mood
     refreshMoodUI();
 
@@ -1493,6 +1514,63 @@ function refreshLanguageUI() {
 
     const active = LANGUAGES[currentLang];
     if (langStatus && active) langStatus.textContent = active.name;
+}
+
+// ── Listener Persona UI ──
+function refreshPersonaUI() {
+    if (!personaOptions) return;
+    personaOptions.innerHTML = "";
+
+    const isPremium = SunnoStorage.isPremiumUser();
+
+    for (const [key, persona] of Object.entries(LISTENER_PERSONAS)) {
+        const isLocked = persona.premium && !isPremium;
+        const card = document.createElement("button");
+        const classes = ["persona-card"];
+        if (key === currentPersona) classes.push("active");
+        if (isLocked) classes.push("locked");
+        card.className = classes.join(" ");
+
+        const iconEl = document.createElement("div");
+        iconEl.className = "persona-icon";
+        iconEl.textContent = persona.icon || "";
+        card.appendChild(iconEl);
+
+        const labelEl = document.createElement("div");
+        labelEl.className = "persona-label";
+        labelEl.textContent = persona.label;
+        card.appendChild(labelEl);
+
+        const descEl = document.createElement("div");
+        descEl.className = "persona-desc";
+        descEl.textContent = persona.desc;
+        card.appendChild(descEl);
+
+        if (isLocked) {
+            const lockEl = document.createElement("span");
+            lockEl.className = "persona-lock";
+            lockEl.textContent = "\uD83D\uDD12";
+            card.appendChild(lockEl);
+        }
+
+        card.addEventListener("click", () => {
+            if (isLocked) {
+                // Close settings overlay first so paywall is visible
+                if (settingsPanel) settingsPanel.classList.add("hidden");
+                showPaywall();
+                return;
+            }
+            currentPersona = key;
+            SunnoStorage.setPreference("listener_persona", key);
+            if (personaStatus) personaStatus.textContent = persona.desc;
+            refreshPersonaUI();
+        });
+
+        personaOptions.appendChild(card);
+    }
+
+    const active = LISTENER_PERSONAS[currentPersona];
+    if (personaStatus && active) personaStatus.textContent = active.desc;
 }
 
 // ── Listener Mood UI ──
@@ -1865,11 +1943,19 @@ function applyPremiumState() {
     // Re-enable orb if it was disabled by paywall
     const orb = document.getElementById("orb-container");
     if (orb) orb.style.pointerEvents = "";
+    // Refresh persona UI — premium personas now unlock
+    refreshPersonaUI();
 }
 
 function applyFreeState() {
     if (premiumBadge) premiumBadge.classList.add("hidden");
     updateRemainingTime();
+    // If current persona is premium but user is no longer premium, revert to default
+    if (LISTENER_PERSONAS[currentPersona]?.premium && !SunnoStorage.isPremiumUser()) {
+        currentPersona = "default";
+        SunnoStorage.setPreference("listener_persona", "default");
+    }
+    refreshPersonaUI();
 }
 
 // Razorpay Checkout

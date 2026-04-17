@@ -77,6 +77,7 @@ class ChatRequest(BaseModel):
     session_id: str = ""
     mood: str = "default"
     language: str = "auto"
+    persona: str = "default"
 
 
 class ChatResponse(BaseModel):
@@ -246,7 +247,7 @@ async def tts_endpoint(req: TTSRequest):
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(req: ChatRequest):
     """Groq-powered chat endpoint for devices without WebGPU."""
-    response_text = await generate_response_groq(req.transcript, req.conversation_history, req.mood, req.language)
+    response_text = await generate_response_groq(req.transcript, req.conversation_history, req.mood, req.language, req.persona)
 
     emotion = detect_emotion(req.transcript)
 
@@ -337,6 +338,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                         audio_pcm, conversation_history, send_message,
                         mood=msg.get("mood", "default"),
                         language=msg.get("language", "auto"),
+                        persona=msg.get("persona", "default"),
                     )
                     if transcript:
                         emotion = detect_emotion(transcript)
@@ -369,6 +371,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 transcript, response_text = await process_voice_streaming(
                     audio_bytes, conversation_history, send_message,
+                    mood=msg.get("mood", "default"),
+                    persona=msg.get("persona", "default"),
                 )
 
                 if not transcript:

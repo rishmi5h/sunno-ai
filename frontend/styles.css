@@ -624,6 +624,73 @@ html, body {
 }
 
 /* ── Wellness item in settings ── */
+/* ── Listener Personas ── */
+.persona-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.5rem;
+}
+.persona-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    padding: 0.7rem 0.8rem;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    text-align: left;
+    color: var(--text);
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+.persona-card:hover {
+    border-color: rgba(244, 162, 97, 0.3);
+}
+.persona-card.active {
+    background: rgba(244, 162, 97, 0.1);
+    border-color: var(--amber);
+}
+.persona-card.locked {
+    opacity: 0.65;
+}
+.persona-card.locked:hover {
+    opacity: 1;
+    background: rgba(244, 162, 97, 0.05);
+    border-color: rgba(244, 162, 97, 0.25);
+    transform: scale(1.01);
+}
+.persona-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+    margin-bottom: 0.15rem;
+}
+.persona-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.persona-card.active .persona-label {
+    color: var(--amber);
+}
+.persona-desc {
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    line-height: 1.35;
+}
+.persona-lock {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    font-size: 0.75rem;
+    opacity: 0.55;
+}
+
 .wellness-item {
     display: flex;
     align-items: center;
