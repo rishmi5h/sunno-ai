@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Caveat:wght@600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=14">
+    <link rel="stylesheet" href="styles.css?v=16">
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body>
@@ -160,6 +160,48 @@
                     Share how you're feeling
                 </button>
                 <button id="recap-close" class="recap-close-btn">Done</button>
+            </div>
+        </div>
+
+        <!-- Mood Timeline overlay (premium) -->
+        <div id="mood-timeline-overlay" class="mood-timeline-overlay hidden">
+            <div class="mood-timeline-card">
+                <div class="mood-timeline-header">
+                    <h2>Your mood timeline</h2>
+                    <button id="mood-timeline-close" class="mood-timeline-close" aria-label="Close">&times;</button>
+                </div>
+
+                <div id="mood-stats" class="mood-stats">
+                    <div class="mood-stat"><span class="mood-stat-value" id="mood-stat-total">0</span><span class="mood-stat-label">sessions</span></div>
+                    <div class="mood-stat"><span class="mood-stat-value" id="mood-stat-days">0</span><span class="mood-stat-label">active days</span></div>
+                    <div class="mood-stat"><span class="mood-stat-value" id="mood-stat-mood">—</span><span class="mood-stat-label">most felt</span></div>
+                </div>
+
+                <p id="mood-trend" class="mood-trend"></p>
+
+                <div class="mood-strip-wrapper">
+                    <div id="mood-strip" class="mood-strip"></div>
+                </div>
+
+                <div id="mood-popover" class="mood-popover hidden">
+                    <p class="mood-popover-date" id="mood-popover-date"></p>
+                    <p class="mood-popover-summary" id="mood-popover-summary"></p>
+                </div>
+
+                <div id="mood-empty" class="mood-empty hidden">
+                    <div class="mood-empty-icon">&#x1F343;</div>
+                    <p>Talk to Sunno and end your session to start your timeline.</p>
+                </div>
+
+                <!-- Locked overlay for free users -->
+                <div id="mood-locked-overlay" class="mood-locked-overlay hidden">
+                    <div class="mood-locked-card">
+                        <div class="mood-locked-icon">&#x1F512;</div>
+                        <h3>See your real mood trend</h3>
+                        <p>Track how you're feeling over time. Premium unlocks unlimited history + insights.</p>
+                        <button id="mood-locked-upgrade" class="subscribe-btn">Subscribe — &#x20B9;199/month</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -319,6 +361,21 @@
                         <span class="wellness-sub">4-7-8 calming exercise · ~1 minute</span>
                     </div>
                 </button>
+                <button id="mood-timeline-menu-btn" class="wellness-item" style="margin-top: 0.5rem;">
+                    <div class="wellness-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="3" y1="12" x2="21" y2="12"/>
+                            <circle cx="6" cy="12" r="2"/>
+                            <circle cx="12" cy="12" r="2"/>
+                            <circle cx="18" cy="12" r="2"/>
+                            <path d="M3 7l3-3M21 17l-3 3"/>
+                        </svg>
+                    </div>
+                    <div class="wellness-text">
+                        <span class="wellness-title">Mood timeline</span>
+                        <span class="wellness-sub">See how you're feeling over time</span>
+                    </div>
+                </button>
             </div>
 
             <!-- Connection -->
@@ -356,7 +413,7 @@
     <script src="capabilities.js"></script>
     <script src="listener-prompt.js"></script>
     <script src="safety.js"></script>
-    <script src="local-storage.js"></script>
+    <script src="local-storage.js?v=16"></script>
     <script src="edge-llm.js"></script>
     <script src="edge-tts.js"></script>
     <script src="ambient.js"></script>
@@ -364,7 +421,7 @@
     <script src="onboarding.js"></script>
 
     <!-- Main app -->
-    <script src="app.js?v=14"></script>
+    <script src="app.js?v=16"></script>
 
     <!-- Service Worker registration -->
     <script>

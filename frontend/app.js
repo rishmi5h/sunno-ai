@@ -558,8 +558,26 @@ function setupWebSpeech() {
             setTimeout(() => {
                 if (state === "idle") statusEl.textContent = "Tap to talk";
             }, 2000);
+        } else if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+            // Mic permission not granted — prompt getUserMedia which shows the Chrome permission dialog
+            statusEl.textContent = "Requesting mic access...";
+            requestMicPermission().then(() => {
+                if (mediaRecorder) {
+                    statusEl.textContent = "Mic ready — tap to talk";
+                    setTimeout(() => {
+                        if (state === "idle") statusEl.textContent = "Tap to talk";
+                    }, 2000);
+                } else {
+                    statusEl.textContent = "Mic access blocked. Enable it in browser settings.";
+                }
+            });
         } else if (event.error === "aborted") {
             // Intentional abort — don't show error
+        } else {
+            statusEl.textContent = "Voice recognition error. Tap to retry.";
+            setTimeout(() => {
+                if (state === "idle") statusEl.textContent = "Tap to talk";
+            }, 3000);
         }
         isRecording = false;
         setState("idle");
@@ -1031,7 +1049,24 @@ function startRecording() {
             }
         }
     } else {
-        if (!mediaRecorder || mediaRecorder.state === "recording") return;
+        // If no mic yet (e.g., permission denied earlier or never asked),
+        // retry the request now — the orb tap is a valid user gesture in Chrome.
+        if (!mediaRecorder) {
+            statusEl.textContent = "Requesting mic access...";
+            requestMicPermission().then(() => {
+                if (mediaRecorder) {
+                    audioChunks = [];
+                    mediaRecorder.start();
+                    isRecording = true;
+                    setState("recording");
+                    if (navigator.vibrate) navigator.vibrate(30);
+                } else {
+                    statusEl.textContent = "Mic access blocked. Enable it in browser settings.";
+                }
+            });
+            return;
+        }
+        if (mediaRecorder.state === "recording") return;
         audioChunks = [];
         mediaRecorder.start();
         isRecording = true;
@@ -1106,13 +1141,50 @@ function updateRemainingTime() {
     }
 }
 
-function showPaywall() {
+const PAYWALL_COPY = {
+    time: {
+        title: "Your free time is up for today",
+        sub: "Upgrade for unlimited listening + a warm, natural premium voice.",
+        disableOrb: true,
+    },
+    persona: {
+        title: "Unlock premium personas",
+        sub: "Choose from Late Night Friend, Tough Love Bhai, Gentle Didi, or Silent Monk with a premium subscription.",
+        disableOrb: false,
+    },
+    timeline: {
+        title: "See your real mood trend",
+        sub: "Track how you're feeling over time with unlimited mood history + insights.",
+        disableOrb: false,
+    },
+    voice: {
+        title: "Unlock premium voice",
+        sub: "Get a warm, natural ElevenLabs voice with a premium subscription.",
+        disableOrb: false,
+    },
+};
+
+function showPaywall(reason = "time") {
+    const copy = PAYWALL_COPY[reason] || PAYWALL_COPY.time;
+    const titleEl = document.querySelector("#paywall-overlay .paywall-title");
+    const subEl = document.querySelector("#paywall-overlay .paywall-sub");
+    if (titleEl) titleEl.textContent = copy.title;
+    if (subEl) subEl.textContent = copy.sub;
+
     if (paywallOverlay) paywallOverlay.classList.remove("hidden");
     if (minuteBanner) minuteBanner.classList.add("hidden");
-    // Disable orb
+
     const orb = document.getElementById("orb-container");
-    if (orb) orb.style.pointerEvents = "none";
-    statusEl.textContent = "Free time used up for today";
+    if (copy.disableOrb) {
+        if (orb) orb.style.pointerEvents = "none";
+        statusEl.textContent = "Free time used up for today";
+    } else {
+        // Feature paywall — keep orb usable so user can still talk on free tier
+        if (orb) orb.style.pointerEvents = "";
+        if (statusEl.textContent === "Free time used up for today") {
+            statusEl.textContent = "Tap to talk";
+        }
+    }
 }
 
 function hidePaywall() {
@@ -1557,7 +1629,7 @@ function refreshPersonaUI() {
             if (isLocked) {
                 // Close settings overlay first so paywall is visible
                 if (settingsPanel) settingsPanel.classList.add("hidden");
-                showPaywall();
+                showPaywall("persona");
                 return;
             }
             currentPersona = key;
@@ -1945,6 +2017,10 @@ function applyPremiumState() {
     if (orb) orb.style.pointerEvents = "";
     // Refresh persona UI — premium personas now unlock
     refreshPersonaUI();
+    // If mood timeline modal is open, re-render to remove lock overlay
+    if (moodTimelineOverlay && !moodTimelineOverlay.classList.contains("hidden")) {
+        openMoodTimeline();
+    }
 }
 
 function applyFreeState() {
@@ -2088,6 +2164,15 @@ if (endSessionBtn) {
             recapMoodDot.setAttribute("data-mood", data.mood || "neutral");
             recapMeta.textContent = `${data.message_count || 0} messages this session`;
             recapOverlay.classList.remove("hidden");
+
+            // Capture into mood timeline (always — lets users build history before subscribing)
+            if (data.summary && data.mood) {
+                SunnoStorage.addMoodEntry({
+                    summary: data.summary,
+                    mood: data.mood,
+                    messageCount: data.message_count || 0,
+                });
+            }
         } catch (err) {
             console.error("Recap error:", err);
             recapSummary.textContent = "Thanks for talking.";
@@ -2143,6 +2228,146 @@ if (recapClose) {
         // Reconnect WebSocket with new session
         if (ws) ws.close();
         setTimeout(connectWebSocket, 500);
+    });
+}
+
+// ── Mood Timeline ──
+const moodTimelineBtn = document.getElementById("mood-timeline-menu-btn");
+const moodTimelineOverlay = document.getElementById("mood-timeline-overlay");
+const moodTimelineClose = document.getElementById("mood-timeline-close");
+const moodStripEl = document.getElementById("mood-strip");
+const moodEmptyEl = document.getElementById("mood-empty");
+const moodPopover = document.getElementById("mood-popover");
+const moodPopoverDate = document.getElementById("mood-popover-date");
+const moodPopoverSummary = document.getElementById("mood-popover-summary");
+const moodLockedOverlay = document.getElementById("mood-locked-overlay");
+const moodLockedUpgrade = document.getElementById("mood-locked-upgrade");
+const moodTrendEl = document.getElementById("mood-trend");
+const moodStatTotal = document.getElementById("mood-stat-total");
+const moodStatDays = document.getElementById("mood-stat-days");
+const moodStatMood = document.getElementById("mood-stat-mood");
+
+const SAMPLE_MOODS = ["calm", "heavy", "frustrated", "calm", "anxious", "relieved", "calm", "mixed", "heavy", "calm", "sad", "calm"];
+
+function formatRelativeDate(ts) {
+    const now = Date.now() / 1000;
+    const diff = now - ts;
+    if (diff < 60) return "Just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
+    const d = new Date(ts * 1000);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function openMoodTimeline() {
+    if (!moodTimelineOverlay) return;
+
+    const isPremium = SunnoStorage.isPremiumUser();
+    const log = SunnoStorage.getMoodLog();
+    const summary = SunnoStorage.getMoodLogSummary();
+
+    // Stats row
+    if (moodStatTotal) moodStatTotal.textContent = String(summary.total);
+    if (moodStatDays) moodStatDays.textContent = String(summary.daysActive);
+    if (moodStatMood) moodStatMood.textContent = summary.dominantMood || "—";
+
+    // Trend line
+    if (moodTrendEl) {
+        moodTrendEl.classList.remove("lighter", "heavier");
+        if (summary.last7Count >= 2 && summary.prev7Count >= 2) {
+            const delta = summary.last7Heaviness - summary.prev7Heaviness;
+            if (delta < -0.4) {
+                moodTrendEl.textContent = "Compared to last week, you're feeling lighter.";
+                moodTrendEl.classList.add("lighter");
+            } else if (delta > 0.4) {
+                moodTrendEl.textContent = "Compared to last week, things feel a bit heavier.";
+                moodTrendEl.classList.add("heavier");
+            } else {
+                moodTrendEl.textContent = "Compared to last week, your mood feels similar.";
+            }
+        } else {
+            moodTrendEl.textContent = "";
+        }
+    }
+
+    // Render dots
+    if (moodStripEl) {
+        moodStripEl.innerHTML = "";
+        const entries = isPremium ? log.slice().reverse() : SAMPLE_MOODS.map((m, i) => ({
+            ts: Math.floor(Date.now() / 1000) - (SAMPLE_MOODS.length - i) * 86400,
+            mood: m, summary: "", msgCount: 0,
+        }));
+
+        if (entries.length === 0) {
+            moodStripEl.classList.add("hidden");
+            if (moodEmptyEl) moodEmptyEl.classList.remove("hidden");
+        } else {
+            moodStripEl.classList.remove("hidden");
+            if (moodEmptyEl) moodEmptyEl.classList.add("hidden");
+            for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                const dot = document.createElement("button");
+                dot.className = "mood-dot-day";
+                dot.setAttribute("data-mood", e.mood);
+                dot.setAttribute("aria-label", `${e.mood} on ${formatRelativeDate(e.ts)}`);
+                dot.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    if (!isPremium) return;
+                    document.querySelectorAll(".mood-dot-day.selected").forEach(d => d.classList.remove("selected"));
+                    dot.classList.add("selected");
+                    if (moodPopover && moodPopoverSummary && moodPopoverDate) {
+                        moodPopoverDate.textContent = formatRelativeDate(e.ts);
+                        moodPopoverSummary.textContent = e.summary || "(no summary)";
+                        moodPopover.classList.remove("hidden");
+                    }
+                });
+                moodStripEl.appendChild(dot);
+            }
+            // Scroll to end (most recent)
+            requestAnimationFrame(() => { moodStripEl.scrollLeft = moodStripEl.scrollWidth; });
+        }
+    }
+
+    // Hide popover when reopening
+    if (moodPopover) moodPopover.classList.add("hidden");
+
+    // Locked state
+    if (moodLockedOverlay) {
+        if (isPremium) moodLockedOverlay.classList.add("hidden");
+        else moodLockedOverlay.classList.remove("hidden");
+    }
+
+    // Hide empty state for free users (sample data covers it)
+    if (!isPremium && moodEmptyEl) moodEmptyEl.classList.add("hidden");
+
+    moodTimelineOverlay.classList.remove("hidden");
+}
+
+function closeMoodTimeline() {
+    if (moodTimelineOverlay) moodTimelineOverlay.classList.add("hidden");
+}
+
+if (moodTimelineBtn) {
+    moodTimelineBtn.addEventListener("click", () => {
+        // Close settings panel first so modal is centered cleanly
+        if (settingsPanel) settingsPanel.classList.add("hidden");
+        setTimeout(openMoodTimeline, 150);
+    });
+}
+if (moodTimelineClose) {
+    moodTimelineClose.addEventListener("click", closeMoodTimeline);
+}
+if (moodTimelineOverlay) {
+    // Click outside the card to close
+    moodTimelineOverlay.addEventListener("click", (e) => {
+        if (e.target === moodTimelineOverlay) closeMoodTimeline();
+    });
+}
+if (moodLockedUpgrade) {
+    moodLockedUpgrade.addEventListener("click", () => {
+        closeMoodTimeline();
+        showPaywall("timeline");
     });
 }
 

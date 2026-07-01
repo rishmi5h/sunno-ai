@@ -316,8 +316,11 @@ html, body {
     position: relative;
     width: 300px;
     height: 300px;
+    max-width: 100vw;
     touch-action: none;
     transition: transform 0.15s;
+    overflow: hidden;
+    border-radius: 50%;
 }
 #orb-container:active {
     transform: scale(0.97);
@@ -809,6 +812,230 @@ html, body {
 .recap-mood-dot[data-mood="relieved"] { background: #5a9a6a; }
 .recap-mood-dot[data-mood="calm"] { background: #6a8a7a; }
 .recap-mood-dot[data-mood="mixed"] { background: linear-gradient(135deg, #7a6f8a, #c45e20); }
+
+/* ── Mood Timeline ── */
+.mood-timeline-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 73;
+    background: rgba(15, 13, 18, 0.78);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    animation: fadeIn 0.3s ease-out;
+}
+.mood-timeline-overlay.hidden { display: none; }
+.mood-timeline-card {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: rgba(20, 18, 26, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 1.4rem 1.3rem 1.5rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.mood-timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.2rem;
+}
+.mood-timeline-header h2 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+}
+.mood-timeline-close {
+    background: transparent;
+    border: none;
+    color: var(--text-faint);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+}
+.mood-timeline-close:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.mood-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+}
+.mood-stat {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 0.7rem 0.4rem;
+    text-align: center;
+}
+.mood-stat-value {
+    display: block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--amber);
+    line-height: 1.2;
+    text-transform: capitalize;
+}
+.mood-stat-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    margin-top: 0.15rem;
+}
+
+.mood-trend {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    text-align: center;
+    margin: 0 0 0.9rem;
+    min-height: 1.2em;
+}
+.mood-trend.lighter { color: #7fc093; }
+.mood-trend.heavier { color: #e07a5f; }
+
+.mood-strip-wrapper {
+    position: relative;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 14px;
+    padding: 0.9rem 0.6rem;
+    margin-bottom: 0.5rem;
+}
+.mood-strip {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    overflow-x: auto;
+    padding: 0.2rem 0.3rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+.mood-strip::-webkit-scrollbar { height: 4px; }
+.mood-strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+.mood-dot-day {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.mood-dot-day:hover, .mood-dot-day.selected {
+    transform: scale(1.25);
+    box-shadow: 0 0 0 2px rgba(244, 162, 97, 0.5);
+}
+.mood-dot-day[data-mood="heavy"] { background: #7a6f8a; }
+.mood-dot-day[data-mood="sad"] { background: #5e7a9a; }
+.mood-dot-day[data-mood="frustrated"] { background: #c45e20; }
+.mood-dot-day[data-mood="anxious"] { background: #b8a040; }
+.mood-dot-day[data-mood="relieved"] { background: #5a9a6a; }
+.mood-dot-day[data-mood="calm"] { background: #6a8a7a; }
+.mood-dot-day[data-mood="mixed"] { background: linear-gradient(135deg, #7a6f8a, #c45e20); }
+.mood-dot-day[data-mood="neutral"] { background: rgba(255, 255, 255, 0.18); }
+
+.mood-popover {
+    background: rgba(244, 162, 97, 0.08);
+    border: 1px solid rgba(244, 162, 97, 0.2);
+    border-radius: 12px;
+    padding: 0.7rem 0.9rem;
+    margin-top: 0.7rem;
+    animation: fadeIn 0.2s ease-out;
+}
+.mood-popover.hidden { display: none; }
+.mood-popover-date {
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    margin: 0 0 0.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.mood-popover-summary {
+    font-size: 0.92rem;
+    color: var(--text);
+    line-height: 1.45;
+    margin: 0;
+}
+
+.mood-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-dim);
+}
+.mood-empty.hidden { display: none; }
+.mood-empty-icon {
+    font-size: 2rem;
+    margin-bottom: 0.6rem;
+    opacity: 0.7;
+}
+.mood-empty p {
+    font-size: 0.92rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Locked overlay for free users — blurs the timeline area */
+.mood-locked-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 13, 18, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    border-radius: 18px;
+    z-index: 1;
+}
+.mood-locked-overlay.hidden { display: none; }
+.mood-locked-card {
+    text-align: center;
+    max-width: 320px;
+}
+.mood-locked-icon {
+    font-size: 2rem;
+    margin-bottom: 0.6rem;
+    opacity: 0.85;
+}
+.mood-locked-card h3 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 0.5rem;
+}
+.mood-locked-card p {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin: 0 0 1.2rem;
+}
+.mood-locked-card .subscribe-btn { width: auto; padding: 0.7rem 1.4rem; }
+
+@media (max-width: 380px) {
+    .mood-stats { grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+    .mood-stat-value { font-size: 1rem; }
+    .mood-stat-label { font-size: 0.65rem; }
+    .mood-timeline-card { padding: 1.2rem 1rem 1.2rem; }
+}
 .recap-summary {
     font-family: 'DM Sans', sans-serif;
     font-size: 1.15rem;

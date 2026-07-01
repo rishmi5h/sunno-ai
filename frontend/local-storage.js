@@ -186,6 +186,83 @@ const SunnoStorage = (() => {
         return getPremium() !== null;
     }
 
+    // ── Mood Timeline (persisted across sessions, no expiry) ──
+    const MOOD_LOG_MAX = 60;
+
+    function getMoodLog() {
+        try {
+            const raw = getPreference("mood_log", null);
+            if (!raw) return [];
+            const arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) return [];
+            // Newest first
+            return arr.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        } catch {
+            return [];
+        }
+    }
+
+    function addMoodEntry(entry) {
+        // entry: { summary, mood, messageCount }
+        if (!entry || !entry.summary || !entry.mood) return;
+        try {
+            const raw = getPreference("mood_log", null);
+            const arr = raw ? (JSON.parse(raw) || []) : [];
+            arr.push({
+                ts: Math.floor(Date.now() / 1000),
+                summary: String(entry.summary).slice(0, 200),
+                mood: String(entry.mood).slice(0, 32),
+                msgCount: Number(entry.messageCount) || 0,
+            });
+            // Trim to last MOOD_LOG_MAX (oldest dropped)
+            const trimmed = arr.slice(-MOOD_LOG_MAX);
+            setPreference("mood_log", JSON.stringify(trimmed));
+        } catch {
+            // Storage full or invalid — silent
+        }
+    }
+
+    function clearMoodLog() {
+        setPreference("mood_log", JSON.stringify([]));
+    }
+
+    function getMoodLogSummary() {
+        const log = getMoodLog(); // newest first
+        if (!log.length) {
+            return { total: 0, daysActive: 0, dominantMood: null, last7Heaviness: 0, prev7Heaviness: 0 };
+        }
+        // Days active = unique YYYY-MM-DD across all entries
+        const days = new Set();
+        const moodCount = {};
+        for (const e of log) {
+            const d = new Date(e.ts * 1000);
+            days.add(d.toISOString().slice(0, 10));
+            moodCount[e.mood] = (moodCount[e.mood] || 0) + 1;
+        }
+        let dominantMood = null, max = 0;
+        for (const [m, c] of Object.entries(moodCount)) {
+            if (c > max) { max = c; dominantMood = m; }
+        }
+
+        // Heaviness score for trend (heavier moods score higher)
+        const HEAVY = { heavy: 3, sad: 3, frustrated: 2, anxious: 2, mixed: 2, calm: 1, relieved: 0 };
+        const now = Math.floor(Date.now() / 1000);
+        const week = 7 * 86400;
+        const last7 = log.filter(e => e.ts >= now - week);
+        const prev7 = log.filter(e => e.ts < now - week && e.ts >= now - 2 * week);
+        const avg = arr => arr.length ? arr.reduce((s, e) => s + (HEAVY[e.mood] ?? 1), 0) / arr.length : 0;
+
+        return {
+            total: log.length,
+            daysActive: days.size,
+            dominantMood,
+            last7Heaviness: avg(last7),
+            prev7Heaviness: avg(prev7),
+            last7Count: last7.length,
+            prev7Count: prev7.length,
+        };
+    }
+
     // Run cleanup on load
     cleanupExpired();
 
@@ -197,5 +274,6 @@ const SunnoStorage = (() => {
         isLimitReached, getUsagePercent,
         FREE_MINUTES_PER_DAY,
         setPremium, getPremium, clearPremium, isPremiumUser,
+        getMoodLog, addMoodEntry, clearMoodLog, getMoodLogSummary,
     };
 })();
